@@ -8,7 +8,10 @@ const CONFIG = {
     GEMINI_MODEL: "gemini-2.0-flash",
     API_ENDPOINT: "https://generativelanguage.googleapis.com/v1beta/models/",
     STORAGE_KEY: "excel_copilot_api_key",
-    MAX_HISTORY: 10
+    THEME_KEY: "excel_copilot_theme",
+    MAX_HISTORY: 10,
+    MAX_RETRIES: 3,
+    RETRY_DELAY: 1000
 };
 
 const state = {
@@ -42,6 +45,11 @@ Office.onReady((info) => {
 
 function initApp() {
     state.apiKey = localStorage.getItem(CONFIG.STORAGE_KEY) || "";
+    // Load saved theme
+    const savedTheme = localStorage.getItem(CONFIG.THEME_KEY);
+    if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    }
     bindEvents();
     readExcelData();
 }
@@ -96,6 +104,12 @@ function bindEvents() {
     // History and Undo buttons
     document.getElementById("historyBtn")?.addEventListener("click", toggleHistoryPanel);
     document.getElementById("undoBtn")?.addEventListener("click", performUndo);
+    
+    // Theme toggle
+    document.getElementById("themeBtn")?.addEventListener("click", toggleTheme);
+    
+    // Keyboard shortcuts
+    document.addEventListener("keydown", handleKeyboardShortcuts);
     
     document.querySelectorAll("[data-prompt]").forEach(el => {
         el.addEventListener("click", () => {
@@ -320,7 +334,7 @@ async function handleSend() {
         }
     } catch (err) {
         hideTyping();
-        addMessage("ai", "Error: " + err.message, "error");
+        addMessage("ai", getErrorMessage(err), "error");
     }
 }
 
@@ -333,23 +347,26 @@ async function callAI(userPrompt) {
     const contents = [...state.conversationHistory];
     contents.push({ role: "user", parts: [{ text: fullUserMessage }] });
     
-    const res = await fetch(
-        `${CONFIG.API_ENDPOINT}${CONFIG.GEMINI_MODEL}:generateContent?key=${state.apiKey}`,
-        {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-                contents,
-                generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
-            })
-        }
-    );
-    
-    if (!res.ok) throw new Error(`API Error: ${res.status}`);
-    
-    const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
+    // Use retry logic for transient errors
+    return await withRetry(async () => {
+        const res = await fetch(
+            `${CONFIG.API_ENDPOINT}${CONFIG.GEMINI_MODEL}:generateContent?key=${state.apiKey}`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    contents,
+                    generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
+                })
+            }
+        );
+        
+        if (!res.ok) throw new Error(`API Error: ${res.status}`);
+        
+        const data = await res.json();
+        return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
+    });
 }
 
 function buildDataContext() {
@@ -809,6 +826,140 @@ async function highlightRange(rangeAddress) {
 async function clearHighlight() {
     // Excel doesn't have a "clear selection" API
     // The selection will change when user interacts with Excel
+}
+
+// ============================================================================
+// Theme Toggle
+// ============================================================================
+
+/**
+ * Toggles between light and dark theme
+ */
+function toggleTheme() {
+    const html = document.documentElement;
+    const currentTheme = html.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', newTheme);
+    localStorage.setItem(CONFIG.THEME_KEY, newTheme);
+    toast(newTheme === 'dark' ? 'Dark mode' : 'Light mode');
+}
+
+// ============================================================================
+// Keyboard Shortcuts
+// ============================================================================
+
+/**
+ * Handles keyboard shortcuts
+ */
+function handleKeyboardShortcuts(e) {
+    // Ctrl+Enter or Cmd+Enter to send message
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const input = document.getElementById("promptInput");
+        if (document.activeElement === input && input.value.trim()) {
+            e.preventDefault();
+            handleSend();
+        }
+    }
+    
+    // Ctrl+Z or Cmd+Z to undo (when not in input)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        const activeEl = document.activeElement;
+        if (activeEl.tagName !== 'INPUT' && activeEl.tagName !== 'TEXTAREA') {
+            if (state.history.entries.length > 0) {
+                e.preventDefault();
+                performUndo();
+            }
+        }
+    }
+    
+    // Escape to close modal or clear input
+    if (e.key === 'Escape') {
+        const modal = document.getElementById("modal");
+        if (modal.classList.contains('open')) {
+            closeModal();
+        } else {
+            const input = document.getElementById("promptInput");
+            if (input.value) {
+                input.value = '';
+                document.getElementById("sendBtn").disabled = true;
+            }
+        }
+    }
+    
+    // Ctrl+D or Cmd+D to toggle dark mode
+    if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault();
+        toggleTheme();
+    }
+}
+
+// ============================================================================
+// Better Error Handling
+// ============================================================================
+
+/**
+ * Validates a range address
+ */
+function isValidRange(address) {
+    if (!address) return false;
+    // Basic Excel range pattern: A1, A1:B10, Sheet1!A1:B10
+    const pattern = /^([A-Za-z_][A-Za-z0-9_]*!)?(\$?[A-Z]+\$?\d+)(:\$?[A-Z]+\$?\d+)?$/i;
+    return pattern.test(address);
+}
+
+/**
+ * Gets a user-friendly error message
+ */
+function getErrorMessage(error, context = '') {
+    const msg = error.message || String(error);
+    
+    // API errors
+    if (msg.includes('401') || msg.includes('403')) {
+        return 'Invalid API key. Please check your settings.';
+    }
+    if (msg.includes('429')) {
+        return 'Rate limit exceeded. Please wait a moment and try again.';
+    }
+    if (msg.includes('500') || msg.includes('502') || msg.includes('503')) {
+        return 'AI service temporarily unavailable. Retrying...';
+    }
+    if (msg.includes('network') || msg.includes('fetch')) {
+        return 'Network error. Please check your connection.';
+    }
+    
+    // Excel errors
+    if (msg.includes('InvalidReference') || msg.includes('invalid range')) {
+        return `Invalid cell reference${context ? ': ' + context : ''}. Please check the range.`;
+    }
+    if (msg.includes('RichApi')) {
+        return 'Excel error. Please try again.';
+    }
+    
+    // Generic
+    return msg.length > 100 ? msg.substring(0, 100) + '...' : msg;
+}
+
+/**
+ * Retries a function with exponential backoff
+ */
+async function withRetry(fn, maxRetries = CONFIG.MAX_RETRIES) {
+    let lastError;
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await fn();
+        } catch (e) {
+            lastError = e;
+            const msg = e.message || '';
+            // Only retry on transient errors
+            if (msg.includes('429') || msg.includes('500') || msg.includes('502') || msg.includes('503')) {
+                const delay = CONFIG.RETRY_DELAY * Math.pow(2, i);
+                await new Promise(r => setTimeout(r, delay));
+                continue;
+            }
+            throw e;
+        }
+    }
+    throw lastError;
 }
 
 // ============================================================================
