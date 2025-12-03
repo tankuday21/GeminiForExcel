@@ -270,7 +270,23 @@ function getCommonRules() {
 - values: <ACTION type="values" target="RANGE">[["val"]]</ACTION>
 - format: <ACTION type="format" target="RANGE">{"bold":true}</ACTION>
 - chart: <ACTION type="chart" target="RANGE" chartType="TYPE" title="TITLE" position="CELL"></ACTION>
-- validation: <ACTION type="validation" target="CELL" source="RANGE"></ACTION>`;
+- validation: <ACTION type="validation" target="CELL" source="RANGE"></ACTION>
+- sort: <ACTION type="sort" target="DATARANGE">{"column":1,"ascending":true}</ACTION>
+
+## SORTING DATA
+To sort data, use the sort action type (NOT formulas like SORT()):
+<ACTION type="sort" target="A1:L51">
+{"column":1,"ascending":true}
+</ACTION>
+
+- target: The full data range including headers (e.g., A1:L51)
+- column: 0-based index of the column to sort by (0=first column, 1=second, etc.)
+- ascending: true for A-Z/smallest first, false for Z-A/largest first
+
+Example: Sort by Name (column B, index 1) ascending:
+<ACTION type="sort" target="A1:L51">
+{"column":1,"ascending":true}
+</ACTION>`;
 }
 
 // ============================================================================

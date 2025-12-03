@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "1.5.0";
+const VERSION = "1.6.0";
 
 import {
     detectTaskType,
@@ -1640,8 +1640,33 @@ function createChart(sheet, dataRange, action) {
 }
 
 function applySort(range, data) {
-    const opts = typeof data === "string" ? JSON.parse(data) : (data || {});
-    range.sort.apply([{ key: opts.column || 0, ascending: opts.ascending !== false }]);
+    let opts = {};
+    
+    // Parse data - can be JSON or simple format
+    if (typeof data === "string") {
+        try {
+            opts = JSON.parse(data);
+        } catch {
+            // Try to parse simple format like "column:1,ascending:true"
+            const parts = data.split(",");
+            for (const part of parts) {
+                const [key, value] = part.split(":").map(s => s.trim());
+                if (key === "column") opts.column = parseInt(value) || 0;
+                if (key === "ascending") opts.ascending = value !== "false";
+            }
+        }
+    } else {
+        opts = data || {};
+    }
+    
+    // Default to first column, ascending
+    const columnIndex = opts.column || 0;
+    const ascending = opts.ascending !== false;
+    
+    range.sort.apply([{ 
+        key: columnIndex, 
+        ascending: ascending 
+    }]);
 }
 
 export { handleSend, handleApply, readExcelData, clearChat };
