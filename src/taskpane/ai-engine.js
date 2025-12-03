@@ -115,15 +115,24 @@ Explain what the formula does and why you chose this approach.`,
 
 ## CHART SELECTION GUIDE
 - **Column/Bar**: Comparing categories
-- **Line**: Trends over time
+- **Line**: Trends over time (use for trend analysis)
 - **Pie/Doughnut**: Parts of a whole (use sparingly, max 5-7 slices)
 - **Scatter**: Correlation between variables
 - **Area**: Cumulative totals over time
 - **Combo**: Multiple data types on one chart
 
+## CRITICAL CHART RULES
+1. **ALWAYS use CONTIGUOUS ranges** - e.g., A1:B10, NOT A1:A10,C1:C10
+2. For trend analysis with non-adjacent columns, include ALL columns between them
+3. If data columns are far apart, use the full data range (e.g., A1:G100)
+4. Include headers in the first row for proper labels
+5. For line/trend charts, ensure date/time is in the first column of the range
+
 ## OUTPUT FORMAT
 <ACTION type="chart" target="DATARANGE" chartType="TYPE" title="TITLE" position="CELL">
 </ACTION>
+
+Example for trend: target="A1:G100" (full range), NOT "B1:B100,G1:G100"
 
 Always explain why you chose this chart type and what story it tells.`,
 

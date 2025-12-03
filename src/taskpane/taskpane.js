@@ -1591,8 +1591,21 @@ function createChart(sheet, dataRange, action) {
         }
     }
     
+    // Handle the data range - check if it's a valid contiguous range
+    let chartDataRange = dataRange;
+    const targetAddress = action.target;
+    
+    // Check if target contains comma (non-contiguous) - not supported directly
+    if (targetAddress && targetAddress.includes(",")) {
+        // For non-contiguous ranges, we need to use the first range
+        // and add series manually, or use a contiguous subset
+        const ranges = targetAddress.split(",").map(r => r.trim());
+        // Use the full data range if available, otherwise first range
+        chartDataRange = sheet.getRange(ranges[0]);
+    }
+    
     // Create the chart
-    const chart = sheet.charts.add(type, dataRange, Excel.ChartSeriesBy.auto);
+    const chart = sheet.charts.add(type, chartDataRange, Excel.ChartSeriesBy.auto);
     
     // Calculate end position (chart size roughly 8 cols x 15 rows)
     const startCol = position.match(/[A-Z]+/)?.[0] || "H";
@@ -1614,6 +1627,11 @@ function createChart(sheet, dataRange, action) {
     // For pie charts, show data labels
     if (ct.includes("pie") || ct.includes("doughnut")) {
         chart.legend.position = Excel.ChartLegendPosition.right;
+    }
+    
+    // For line/trend charts, improve readability
+    if (ct.includes("line") || ct.includes("trend")) {
+        chart.legend.position = Excel.ChartLegendPosition.bottom;
     }
 }
 
