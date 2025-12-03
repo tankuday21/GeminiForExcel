@@ -1,12 +1,9 @@
 /*
- * Excel AI Copilot - Professional Grade
+ * Excel AI Copilot - Fixed Data Reading
  */
 
 /* global document, Excel, Office, fetch, localStorage */
 
-// ============================================================================
-// Configuration
-// ============================================================================
 const CONFIG = {
     GEMINI_MODEL: "gemini-2.0-flash",
     API_ENDPOINT: "https://generativelanguage.googleapis.com/v1beta/models/",
@@ -14,15 +11,10 @@ const CONFIG = {
     MAX_HISTORY: 10
 };
 
-// ============================================================================
-// State
-// ============================================================================
 const state = {
     apiKey: "",
     pendingActions: [],
-    selectionData: null,
-    selectionAddress: "",
-    sheetName: "",
+    currentData: null,
     conversationHistory: [],
     isFirstMessage: true
 };
@@ -32,22 +24,17 @@ const state = {
 // ============================================================================
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
-        document.addEventListener("DOMContentLoaded", initApp);
-        if (document.readyState === "complete" || document.readyState === "interactive") {
-            initApp();
-        }
+        initApp();
     }
 });
 
 function initApp() {
     state.apiKey = localStorage.getItem(CONFIG.STORAGE_KEY) || "";
     bindEvents();
-    refreshContext();
-    setupAutoRefresh();
+    readExcelData();
 }
 
 function bindEvents() {
-    // Send
     const sendBtn = document.getElementById("sendBtn");
     const input = document.getElementById("promptInput");
     
@@ -60,43 +47,40 @@ function bindEvents() {
     });
     input?.addEventListener("input", () => {
         sendBtn.disabled = !input.value.trim();
-        autoResize(input);
+        input.style.height = "auto";
+        input.style.height = Math.min(input.scrollHeight, 120) + "px";
     });
     
-    // Apply
     document.getElementById("applyBtn")?.addEventListener("click", handleApply);
     
-    // Refresh
-    document.getElementById("refreshBtn")?.addEventListener("click", () => {
+    document.getElementById("refreshBtn")?.addEventListener("click", async () => {
         const btn = document.getElementById("refreshBtn");
         btn.classList.add("loading");
-        refreshContext().finally(() => btn.classList.remove("loading"));
+        await readExcelData();
+        btn.classList.remove("loading");
+        toast("Data refreshed");
     });
     
-    // Context toggle
-    document.getElementById("useContext")?.addEventListener("change", refreshContext);
-    
-    // Settings
     document.getElementById("settingsBtn")?.addEventListener("click", () => {
         document.getElementById("apiKeyInput").value = state.apiKey;
         document.getElementById("modal").classList.add("open");
     });
+    
     document.getElementById("closeModal")?.addEventListener("click", closeModal);
     document.getElementById("cancelBtn")?.addEventListener("click", closeModal);
     document.getElementById("saveBtn")?.addEventListener("click", () => {
         state.apiKey = document.getElementById("apiKeyInput").value.trim();
         localStorage.setItem(CONFIG.STORAGE_KEY, state.apiKey);
         closeModal();
-        toast("API key saved");
+        toast("Saved");
     });
+    
     document.getElementById("modal")?.addEventListener("click", (e) => {
         if (e.target.id === "modal") closeModal();
     });
     
-    // Clear
     document.getElementById("clearBtn")?.addEventListener("click", clearChat);
     
-    // Suggestions
     document.querySelectorAll("[data-prompt]").forEach(el => {
         el.addEventListener("click", () => {
             document.getElementById("promptInput").value = el.dataset.prompt;
@@ -105,69 +89,86 @@ function bindEvents() {
         });
     });
     
-    // Password toggle
     document.getElementById("togglePwd")?.addEventListener("click", () => {
         const inp = document.getElementById("apiKeyInput");
         inp.type = inp.type === "password" ? "text" : "password";
     });
-}
-
-function autoResize(el) {
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+    
+    // Auto-refresh on selection change
+    setupSelectionListener();
 }
 
 function closeModal() {
     document.getElementById("modal").classList.remove("open");
 }
 
-async function setupAutoRefresh() {
+async function setupSelectionListener() {
     try {
         await Excel.run(async (ctx) => {
-            ctx.workbook.worksheets.getActiveWorksheet().onSelectionChanged.add(refreshContext);
+            ctx.workbook.worksheets.getActiveWorksheet().onSelectionChanged.add(readExcelData);
             await ctx.sync();
         });
     } catch (e) { /* ignore */ }
 }
 
 // ============================================================================
-// Context Management
+// Read Excel Data - ALWAYS reads data
 // ============================================================================
-async function refreshContext() {
-    const useContext = document.getElementById("useContext")?.checked;
+async function readExcelData() {
     const infoEl = document.getElementById("contextInfo");
-    
-    if (!useContext) {
-        infoEl.textContent = "Context off";
-        state.selectionData = null;
-        state.selectionAddress = "";
-        return;
-    }
     
     try {
         await Excel.run(async (ctx) => {
             const sheet = ctx.workbook.worksheets.getActiveWorksheet();
-            const range = ctx.workbook.getSelectedRange();
+            const selection = ctx.workbook.getSelectedRange();
+            const usedRange = sheet.getUsedRange();
             
             sheet.load("name");
-            range.load(["address", "values", "formulas", "numberFormat", "rowCount", "columnCount"]);
+            selection.load(["address", "values", "formulas", "rowCount", "columnCount"]);
+            usedRange.load(["address", "values", "rowCount", "columnCount"]);
+            
             await ctx.sync();
             
-            state.sheetName = sheet.name;
-            state.selectionAddress = range.address;
-            state.selectionData = {
-                values: range.values,
-                formulas: range.formulas,
-                formats: range.numberFormat,
-                rows: range.rowCount,
-                cols: range.columnCount
+            const sheetName = sheet.name;
+            
+            // Get selection data
+            const selectionData = {
+                address: selection.address,
+                values: selection.values,
+                formulas: selection.formulas,
+                rows: selection.rowCount,
+                cols: selection.columnCount
             };
             
-            infoEl.textContent = `${range.address} · ${range.rowCount}×${range.columnCount}`;
+            // Get full sheet data
+            const fullSheetData = {
+                address: usedRange.address,
+                values: usedRange.values,
+                rows: usedRange.rowCount,
+                cols: usedRange.columnCount
+            };
+            
+            // Determine if selection is meaningful (more than 1 cell or has data)
+            const hasSelection = selectionData.rows > 1 || selectionData.cols > 1 || 
+                                 (selectionData.values[0]?.[0] !== null && selectionData.values[0]?.[0] !== "");
+            
+            state.currentData = {
+                sheetName,
+                selection: selectionData,
+                fullSheet: fullSheetData,
+                hasSelection
+            };
+            
+            // Update UI
+            if (hasSelection) {
+                infoEl.textContent = `${selectionData.address} (${selectionData.rows}×${selectionData.cols})`;
+            } else {
+                infoEl.textContent = `Sheet: ${sheetName} (${fullSheetData.rows}×${fullSheetData.cols})`;
+            }
         });
     } catch (e) {
-        infoEl.textContent = "No selection";
-        state.selectionData = null;
+        infoEl.textContent = "No data";
+        state.currentData = null;
     }
 }
 
@@ -184,16 +185,13 @@ function showChat() {
 
 function addMessage(role, content, type = "") {
     showChat();
-    
     const chat = document.getElementById("chat");
     const msg = document.createElement("div");
     msg.className = `msg ${role} ${type}`;
-    
     msg.innerHTML = `
         <div class="msg-avatar">${role === "user" ? "U" : "AI"}</div>
         <div class="msg-body">${formatText(content)}</div>
     `;
-    
     chat.appendChild(msg);
     chat.scrollTop = chat.scrollHeight;
 }
@@ -256,8 +254,10 @@ async function handleSend() {
         return;
     }
     
+    // Always refresh data before sending
+    await readExcelData();
+    
     addMessage("user", prompt);
-    state.conversationHistory.push({ role: "user", parts: [{ text: prompt }] });
     
     input.value = "";
     input.style.height = "auto";
@@ -266,12 +266,9 @@ async function handleSend() {
     showTyping();
     
     try {
-        const response = await callAI();
+        const response = await callAI(prompt);
         hideTyping();
         
-        state.conversationHistory.push({ role: "model", parts: [{ text: response }] });
-        
-        // Parse actions
         const { message, actions } = parseResponse(response);
         state.pendingActions = actions;
         
@@ -280,37 +277,34 @@ async function handleSend() {
         if (actions.length) {
             document.getElementById("applyBtn").disabled = false;
         }
+        
+        // Save to history
+        state.conversationHistory.push(
+            { role: "user", parts: [{ text: prompt }] },
+            { role: "model", parts: [{ text: response }] }
+        );
+        
+        // Trim history
+        if (state.conversationHistory.length > CONFIG.MAX_HISTORY * 2) {
+            state.conversationHistory = state.conversationHistory.slice(-CONFIG.MAX_HISTORY * 2);
+        }
     } catch (err) {
         hideTyping();
         addMessage("ai", "Error: " + err.message, "error");
     }
 }
 
-async function callAI() {
+async function callAI(userPrompt) {
+    // Build the full prompt with data
+    const dataContext = buildDataContext();
     const systemPrompt = getSystemPrompt();
-    const contextMsg = getContextMessage();
     
-    // Build conversation
-    const contents = [];
+    // Create message with data included
+    const fullUserMessage = `${dataContext}\n\nUser request: ${userPrompt}`;
     
-    // Add context at start
-    if (contextMsg && state.conversationHistory.length <= 2) {
-        contents.push({ role: "user", parts: [{ text: contextMsg }] });
-        contents.push({ role: "model", parts: [{ text: "I can see your data. What would you like me to do?" }] });
-    }
-    
-    // Add history
-    for (const msg of state.conversationHistory.slice(-CONFIG.MAX_HISTORY * 2)) {
-        contents.push(msg);
-    }
-    
-    // Update last user message with current context
-    if (contents.length && state.selectionData) {
-        const last = contents[contents.length - 1];
-        if (last.role === "user") {
-            last.parts[0].text = `[Selection: ${state.selectionAddress}]\n${last.parts[0].text}`;
-        }
-    }
+    // Build contents
+    const contents = [...state.conversationHistory];
+    contents.push({ role: "user", parts: [{ text: fullUserMessage }] });
     
     const res = await fetch(
         `${CONFIG.API_ENDPOINT}${CONFIG.GEMINI_MODEL}:generateContent?key=${state.apiKey}`,
@@ -320,80 +314,112 @@ async function callAI() {
             body: JSON.stringify({
                 systemInstruction: { parts: [{ text: systemPrompt }] },
                 contents,
-                generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
+                generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
             })
         }
     );
     
-    if (!res.ok) throw new Error("API request failed");
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`API Error: ${res.status}`);
+    }
     
     const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
+}
+
+function buildDataContext() {
+    if (!state.currentData) {
+        return "NO DATA AVAILABLE - Please ensure Excel has data.";
+    }
+    
+    const { sheetName, selection, fullSheet, hasSelection } = state.currentData;
+    
+    let context = `=== EXCEL DATA ===\nSheet: ${sheetName}\n\n`;
+    
+    // Always include selection info
+    context += `SELECTED RANGE: ${selection.address} (${selection.rows} rows × ${selection.cols} cols)\n`;
+    context += `SELECTED DATA:\n${formatDataAsTable(selection.values)}\n\n`;
+    
+    // Also include full sheet summary if different from selection
+    if (!hasSelection || fullSheet.rows > selection.rows || fullSheet.cols > selection.cols) {
+        context += `FULL SHEET RANGE: ${fullSheet.address} (${fullSheet.rows} rows × ${fullSheet.cols} cols)\n`;
+        
+        // Include full sheet data (limited to first 100 rows)
+        const limitedValues = fullSheet.values.slice(0, 100);
+        context += `FULL SHEET DATA (first ${Math.min(100, fullSheet.rows)} rows):\n${formatDataAsTable(limitedValues)}\n`;
+    }
+    
+    return context;
+}
+
+function formatDataAsTable(values) {
+    if (!values || !values.length) return "(empty)";
+    
+    let table = "";
+    const maxCols = Math.min(values[0]?.length || 0, 20);
+    
+    for (let r = 0; r < values.length; r++) {
+        const row = [];
+        for (let c = 0; c < maxCols; c++) {
+            let val = values[r]?.[c];
+            if (val === null || val === undefined) val = "";
+            if (typeof val === "number") val = val.toString();
+            if (typeof val === "string" && val.length > 50) val = val.substring(0, 50) + "...";
+            row.push(val);
+        }
+        table += `Row ${r + 1}: ${row.join(" | ")}\n`;
+    }
+    
+    return table;
 }
 
 function getSystemPrompt() {
-    return `You are Excel Copilot, an expert Excel assistant. You help users with formulas, data analysis, formatting, and automation.
+    return `You are Excel Copilot, an expert Excel assistant.
 
-## RULES
-1. Be concise and professional
-2. Remember conversation context
-3. When user asks to apply something to multiple cells, ALWAYS specify the full range
-4. For formulas that need to be filled down, provide the formula AND specify the full target range
+## YOUR CAPABILITIES
+- Analyze data and provide insights
+- Create formulas (SUM, AVERAGE, VLOOKUP, IF, etc.)
+- Format cells and create tables
+- Create charts
+- Sort and filter data
+- Find patterns, trends, outliers
 
-## ACTIONS
-When you need to modify Excel, include action blocks:
+## IMPORTANT RULES
+1. You ALWAYS receive the current Excel data in the user's message
+2. Analyze the ACTUAL data provided - never ask for data again
+3. Be specific - reference actual cell values, column names, row numbers
+4. When creating formulas, specify exact cell ranges
+
+## RESPONSE FORMAT
+For analysis: Provide clear insights based on the actual data
+For actions: Include action blocks like this:
 
 <ACTION type="formula" target="E2:E10">
-=SUM($B$2:B2)
+=SUM(B2:D2)
 </ACTION>
 
-<ACTION type="values" target="A1:B2">
-[["Name","Age"],["John",25]]
+<ACTION type="values" target="A1:C1">
+[["Name","Age","City"]]
 </ACTION>
 
-<ACTION type="format" target="A1:D1">
+<ACTION type="format" target="A1:E1">
 {"bold":true,"fill":"#4472C4","fontColor":"#FFFFFF"}
 </ACTION>
 
-<ACTION type="autofill" source="E2" target="E2:E10">
+<ACTION type="chart" target="A1:D10">
+column
 </ACTION>
 
 ## ACTION TYPES
-- formula: Apply formula to range (will auto-adjust relative refs)
+- formula: Apply Excel formula
 - values: Set cell values (JSON 2D array)
-- format: Apply formatting (JSON object)
-- autofill: Fill formula from source to target range
-- chart: Create chart (specify type: line/bar/pie/column)
-- sort: Sort range (specify column and order)
-- filter: Apply filter
+- format: Apply formatting (JSON with bold, fill, fontColor, fontSize, border, numberFormat)
+- chart: Create chart (line, bar, pie, column, area)
+- autofill: Fill formula from source to target
+- sort: Sort data
 
-## IMPORTANT
-- Always use full range like "E2:E10" not just "E2"
-- For running totals/cumulative, use autofill action
-- Provide clear explanation before action blocks`;
-}
-
-function getContextMessage() {
-    if (!state.selectionData) return "";
-    
-    const { values, rows, cols } = state.selectionData;
-    const maxRows = Math.min(rows, 50);
-    const maxCols = Math.min(cols, 20);
-    
-    let data = "";
-    for (let r = 0; r < maxRows; r++) {
-        const row = [];
-        for (let c = 0; c < maxCols; c++) {
-            row.push(values[r]?.[c] ?? "");
-        }
-        data += row.join("\t") + "\n";
-    }
-    
-    return `Sheet: ${state.sheetName}
-Selection: ${state.selectionAddress} (${rows} rows × ${cols} cols)
-
-Data:
-${data}`;
+Always analyze the provided data directly. Never say you can't see the data.`;
 }
 
 function parseResponse(text) {
@@ -413,7 +439,6 @@ function parseResponse(text) {
     }
     
     const message = text.replace(/<ACTION[\s\S]*?<\/ACTION>/g, "").trim();
-    
     return { message: message || "Ready to apply.", actions };
 }
 
@@ -444,7 +469,7 @@ async function handleApply() {
         addMessage("ai", "Changes applied successfully.", "success");
         toast("Applied");
         state.pendingActions = [];
-        await refreshContext();
+        await readExcelData();
     } catch (err) {
         addMessage("ai", "Failed: " + err.message, "error");
         toast("Failed");
@@ -469,35 +494,29 @@ async function executeAction(ctx, sheet, action) {
     
     switch (type) {
         case "formula":
-            await applyFormula(ctx, range, data);
+            await applyFormula(range, data);
             break;
-            
         case "values":
             applyValues(range, data);
             break;
-            
         case "format":
             applyFormat(range, data);
             break;
-            
         case "autofill":
-            await applyAutofill(ctx, sheet, source, target);
+            await applyAutofill(sheet, source, target);
             break;
-            
         case "chart":
             createChart(sheet, range, data);
             break;
-            
         case "sort":
-            await applySort(range, data);
+            applySort(range, data);
             break;
-            
         default:
             range.values = [[data]];
     }
 }
 
-async function applyFormula(ctx, range, formula) {
+async function applyFormula(range, formula) {
     const rows = range.rowCount;
     const cols = range.columnCount;
     
@@ -506,26 +525,15 @@ async function applyFormula(ctx, range, formula) {
         return;
     }
     
-    // Parse the starting cell from range address
-    const addr = range.address.split("!").pop();
-    const startMatch = addr.match(/([A-Z]+)(\d+)/);
-    if (!startMatch) {
-        range.formulas = [[formula]];
-        return;
-    }
-    
-    const startRow = parseInt(startMatch[2]);
-    
-    // Build formula array with adjusted row references
+    // Build formula array with adjusted references
     const formulas = [];
     for (let r = 0; r < rows; r++) {
         const rowFormulas = [];
         for (let c = 0; c < cols; c++) {
             let f = formula;
             if (r > 0) {
-                // Adjust non-absolute row references
                 f = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (m, d1, col, d2, row) => {
-                    if (d2 === "$") return m; // Absolute row
+                    if (d2 === "$") return m;
                     return `${d1}${col}${d2}${parseInt(row) + r}`;
                 });
             }
@@ -551,11 +559,7 @@ function applyValues(range, data) {
 
 function applyFormat(range, data) {
     let fmt;
-    try {
-        fmt = JSON.parse(data);
-    } catch {
-        fmt = {};
-    }
+    try { fmt = JSON.parse(data); } catch { fmt = {}; }
     
     if (fmt.bold) range.format.font.bold = true;
     if (fmt.italic) range.format.font.italic = true;
@@ -563,7 +567,6 @@ function applyFormat(range, data) {
     if (fmt.fontColor) range.format.font.color = fmt.fontColor;
     if (fmt.fontSize) range.format.font.size = fmt.fontSize;
     if (fmt.numberFormat) range.numberFormat = [[fmt.numberFormat]];
-    if (fmt.align) range.format.horizontalAlignment = fmt.align;
     if (fmt.border) {
         range.format.borders.getItem("EdgeTop").style = "Continuous";
         range.format.borders.getItem("EdgeBottom").style = "Continuous";
@@ -572,7 +575,7 @@ function applyFormat(range, data) {
     }
 }
 
-async function applyAutofill(ctx, sheet, source, target) {
+async function applyAutofill(sheet, source, target) {
     const sourceRange = sheet.getRange(source);
     const targetRange = sheet.getRange(target);
     sourceRange.autoFill(targetRange, Excel.AutoFillType.fillDefault);
@@ -580,29 +583,21 @@ async function applyAutofill(ctx, sheet, source, target) {
 
 function createChart(sheet, dataRange, data) {
     let chartType = Excel.ChartType.columnClustered;
-    const d = data.toLowerCase();
+    const d = (data || "").toLowerCase();
     
     if (d.includes("line")) chartType = Excel.ChartType.line;
     else if (d.includes("pie")) chartType = Excel.ChartType.pie;
     else if (d.includes("bar")) chartType = Excel.ChartType.barClustered;
     else if (d.includes("area")) chartType = Excel.ChartType.area;
-    else if (d.includes("scatter")) chartType = Excel.ChartType.xyscatter;
     
     const chart = sheet.charts.add(chartType, dataRange, Excel.ChartSeriesBy.auto);
     chart.setPosition("H2", "P17");
     chart.title.text = "Chart";
-    chart.legend.position = Excel.ChartLegendPosition.bottom;
 }
 
-async function applySort(range, data) {
+function applySort(range, data) {
     const opts = typeof data === "string" ? { column: 0, ascending: true } : data;
-    range.sort.apply([{
-        key: opts.column || 0,
-        ascending: opts.ascending !== false
-    }]);
+    range.sort.apply([{ key: opts.column || 0, ascending: opts.ascending !== false }]);
 }
 
-// ============================================================================
-// Exports
-// ============================================================================
-export { handleSend, handleApply, refreshContext, clearChat };
+export { handleSend, handleApply, readExcelData, clearChat };
