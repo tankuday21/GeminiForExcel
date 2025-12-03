@@ -414,67 +414,54 @@ function getSystemPrompt() {
 
 ## CRITICAL RULES
 
-1. **ALWAYS USE THE CORRECT COLUMN LETTERS** - Check the COLUMN STRUCTURE table carefully
-2. **VERIFY column names match column letters** - If user says "State column", find which letter has "State" header
-3. **Use exact cell references** - e.g., E2:E100, not generic references
-4. **Data starts at row 2** (row 1 is headers) unless otherwise shown
+1. **CHECK THE COLUMN STRUCTURE TABLE** - Find the exact column letter for each header name
+2. **State column might be E, F, or any letter** - ALWAYS verify by looking at the table
+3. **Data starts at row 2** (row 1 is headers)
 
-## BEFORE ANY ACTION
+## HOW TO CREATE A DROPDOWN
 
-1. Identify the correct column letter by matching the header name
-2. Determine the data range (usually row 2 to last row)
-3. Double-check your formula references
+For a dropdown of values from a column:
+1. Look at COLUMN STRUCTURE to find the correct column letter
+2. Use the validation action with the source range
 
-## ACTION FORMAT
+Example: If "State" is in column E with data from row 2 to row 100:
 
-Use XML-style action blocks:
-
-**For Data Validation (Dropdown):**
-<ACTION type="validation" target="K10" source="E2:E100" validationType="list">
+<ACTION type="validation" target="K10" source="E2:E100">
 </ACTION>
 
-**For Formulas:**
-<ACTION type="formula" target="F2:F100">
-=E2*D2
+That's it! Just one action. The source should be the actual data range (e.g., E2:E100).
+
+## ACTION TYPES
+
+**Dropdown/Validation:**
+<ACTION type="validation" target="CELL" source="DATARANGE">
 </ACTION>
 
-**For UNIQUE formula (spill):**
-<ACTION type="formula" target="L1">
-=UNIQUE(E2:E100)
+**Formula:**
+<ACTION type="formula" target="CELL_OR_RANGE">
+=YOUR_FORMULA
 </ACTION>
 
-**For Values:**
-<ACTION type="values" target="A1:B2">
-[["Header1","Header2"],["Value1","Value2"]]
+**Values:**
+<ACTION type="values" target="RANGE">
+[["val1","val2"],["val3","val4"]]
 </ACTION>
 
-**For Formatting:**
-<ACTION type="format" target="A1:F1">
+**Format:**
+<ACTION type="format" target="RANGE">
 {"bold":true,"fill":"#4472C4","fontColor":"#FFFFFF"}
 </ACTION>
 
-**For Charts:**
-<ACTION type="chart" target="A1:D20" chartType="column">
+**Chart:**
+<ACTION type="chart" target="DATARANGE" chartType="column">
 </ACTION>
 
-## VALIDATION DROPDOWN EXAMPLE
+## IMPORTANT
 
-If user wants dropdown of "State" values in cell K10, and State is in column E:
-1. Find State column = E
-2. Data range = E2:E[lastrow]
-3. Create validation:
-
-<ACTION type="validation" target="K10" source="E2:E100" validationType="list">
-</ACTION>
-
-## COMMON MISTAKES TO AVOID
-
-- Using wrong column letter (e.g., C instead of E for State)
-- Forgetting to check the COLUMN STRUCTURE table
-- Using row 1 in data ranges (row 1 is headers)
-- Not specifying the full data range
-
-Always explain what you're doing and which columns you're using.`;
+- ALWAYS check COLUMN STRUCTURE first
+- For dropdowns, source is the data column range (e.g., E2:E100)
+- Don't use UNIQUE formula for dropdowns - just use the source range directly
+- Excel will show unique values in the dropdown automatically from the source range`;
 }
 
 function parseResponse(text) {
@@ -489,10 +476,9 @@ function parseResponse(text) {
         const type = attrs.match(/type="([^"]+)"/)?.[1] || "formula";
         const target = attrs.match(/target="([^"]+)"/)?.[1] || "";
         const source = attrs.match(/source="([^"]+)"/)?.[1] || "";
-        const validationType = attrs.match(/validationType="([^"]+)"/)?.[1] || "";
         const chartType = attrs.match(/chartType="([^"]+)"/)?.[1] || "column";
         
-        actions.push({ type, target, source, validationType, chartType, data: content });
+        actions.push({ type, target, source, chartType, data: content });
     }
     
     const message = text.replace(/<ACTION[\s\S]*?<\/ACTION>/g, "").trim();
@@ -574,7 +560,7 @@ async function executeAction(ctx, sheet, action) {
             break;
             
         case "validation":
-            await applyValidation(ctx, range, source, validationType);
+            await applyValidation(ctx, range, source);
             break;
             
         case "chart":
@@ -655,12 +641,17 @@ function applyFormat(range, data) {
     }
 }
 
-async function applyValidation(ctx, range, source, validationType) {
-    if (validationType === "list" && source) {
+async function applyValidation(ctx, range, source) {
+    if (source) {
+        // Clear any existing validation first
+        range.dataValidation.clear();
+        await ctx.sync();
+        
+        // Set the validation rule
         range.dataValidation.rule = {
             list: {
                 inCellDropDown: true,
-                source: source
+                source: "=" + source
             }
         };
     }
