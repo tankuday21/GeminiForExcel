@@ -1,5 +1,5 @@
 /*
- * Excel AI Copilot - With Chat Memory
+ * Excel AI Copilot - Professional Grade
  */
 
 /* global document, Excel, Office, fetch, localStorage */
@@ -11,647 +11,598 @@ const CONFIG = {
     GEMINI_MODEL: "gemini-2.0-flash",
     API_ENDPOINT: "https://generativelanguage.googleapis.com/v1beta/models/",
     STORAGE_KEY: "excel_copilot_api_key",
-    MAX_CONTEXT_ROWS: 100,
-    MAX_CONTEXT_COLS: 26,
-    MAX_HISTORY: 20 // Keep last 20 messages for context
+    MAX_HISTORY: 10
 };
 
 // ============================================================================
 // State
 // ============================================================================
-let state = {
+const state = {
     apiKey: "",
-    lastResponse: null,
-    pendingAction: null,
+    pendingActions: [],
     selectionData: null,
     selectionAddress: "",
-    conversationHistory: [], // For Gemini API memory
+    sheetName: "",
+    conversationHistory: [],
     isFirstMessage: true
 };
 
 // ============================================================================
-// DOM Elements
-// ============================================================================
-const elements = {};
-
-// ============================================================================
-// Initialization
+// Initialize
 // ============================================================================
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
-        initializeApp();
+        document.addEventListener("DOMContentLoaded", initApp);
+        if (document.readyState === "complete" || document.readyState === "interactive") {
+            initApp();
+        }
     }
 });
 
-function initializeApp() {
-    cacheElements();
+function initApp() {
     state.apiKey = localStorage.getItem(CONFIG.STORAGE_KEY) || "";
     bindEvents();
-    refreshSelection();
-    setupSelectionHandler();
-    setupTextareaAutoResize();
-}
-
-function cacheElements() {
-    elements.welcomeScreen = document.getElementById("welcomeScreen");
-    elements.chatContainer = document.getElementById("chatContainer");
-    elements.promptInput = document.getElementById("promptInput");
-    elements.sendBtn = document.getElementById("sendBtn");
-    elements.applyBtn = document.getElementById("applyBtn");
-    elements.refreshBtn = document.getElementById("refreshBtn");
-    elements.useSelection = document.getElementById("useSelection");
-    elements.selectionText = document.getElementById("selectionText");
-    elements.settingsBtn = document.getElementById("settingsBtn");
-    elements.settingsModal = document.getElementById("settingsModal");
-    elements.closeSettings = document.getElementById("closeSettings");
-    elements.cancelSettings = document.getElementById("cancelSettings");
-    elements.saveSettings = document.getElementById("saveSettings");
-    elements.apiKeyInput = document.getElementById("apiKeyInput");
-    elements.togglePassword = document.getElementById("togglePassword");
-    elements.toast = document.getElementById("toast");
-    elements.toastMessage = document.getElementById("toastMessage");
-    elements.clearChat = document.getElementById("clearChat");
+    refreshContext();
+    setupAutoRefresh();
 }
 
 function bindEvents() {
-    elements.sendBtn?.addEventListener("click", sendMessage);
-    elements.promptInput?.addEventListener("keydown", (e) => {
+    // Send
+    const sendBtn = document.getElementById("sendBtn");
+    const input = document.getElementById("promptInput");
+    
+    sendBtn?.addEventListener("click", handleSend);
+    input?.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            sendMessage();
+            handleSend();
         }
     });
-    
-    elements.promptInput?.addEventListener("input", () => {
-        elements.sendBtn.disabled = !elements.promptInput.value.trim();
+    input?.addEventListener("input", () => {
+        sendBtn.disabled = !input.value.trim();
+        autoResize(input);
     });
     
-    elements.applyBtn?.addEventListener("click", applyChanges);
+    // Apply
+    document.getElementById("applyBtn")?.addEventListener("click", handleApply);
     
-    elements.refreshBtn?.addEventListener("click", () => {
-        elements.refreshBtn.classList.add("spinning");
-        refreshSelection().then(() => {
-            setTimeout(() => elements.refreshBtn.classList.remove("spinning"), 500);
+    // Refresh
+    document.getElementById("refreshBtn")?.addEventListener("click", () => {
+        const btn = document.getElementById("refreshBtn");
+        btn.classList.add("loading");
+        refreshContext().finally(() => btn.classList.remove("loading"));
+    });
+    
+    // Context toggle
+    document.getElementById("useContext")?.addEventListener("change", refreshContext);
+    
+    // Settings
+    document.getElementById("settingsBtn")?.addEventListener("click", () => {
+        document.getElementById("apiKeyInput").value = state.apiKey;
+        document.getElementById("modal").classList.add("open");
+    });
+    document.getElementById("closeModal")?.addEventListener("click", closeModal);
+    document.getElementById("cancelBtn")?.addEventListener("click", closeModal);
+    document.getElementById("saveBtn")?.addEventListener("click", () => {
+        state.apiKey = document.getElementById("apiKeyInput").value.trim();
+        localStorage.setItem(CONFIG.STORAGE_KEY, state.apiKey);
+        closeModal();
+        toast("API key saved");
+    });
+    document.getElementById("modal")?.addEventListener("click", (e) => {
+        if (e.target.id === "modal") closeModal();
+    });
+    
+    // Clear
+    document.getElementById("clearBtn")?.addEventListener("click", clearChat);
+    
+    // Suggestions
+    document.querySelectorAll("[data-prompt]").forEach(el => {
+        el.addEventListener("click", () => {
+            document.getElementById("promptInput").value = el.dataset.prompt;
+            document.getElementById("sendBtn").disabled = false;
+            handleSend();
         });
     });
     
-    elements.useSelection?.addEventListener("change", refreshSelection);
-    
-    elements.settingsBtn?.addEventListener("click", openSettings);
-    elements.closeSettings?.addEventListener("click", closeSettings);
-    elements.cancelSettings?.addEventListener("click", closeSettings);
-    elements.saveSettings?.addEventListener("click", saveSettings);
-    
-    elements.clearChat?.addEventListener("click", clearConversation);
-    
-    elements.togglePassword?.addEventListener("click", () => {
-        const input = elements.apiKeyInput;
-        const icon = elements.togglePassword.querySelector("i");
-        if (input.type === "password") {
-            input.type = "text";
-            icon.classList.replace("fa-eye", "fa-eye-slash");
-        } else {
-            input.type = "password";
-            icon.classList.replace("fa-eye-slash", "fa-eye");
-        }
-    });
-    
-    elements.settingsModal?.addEventListener("click", (e) => {
-        if (e.target === elements.settingsModal) closeSettings();
-    });
-    
-    document.querySelectorAll(".suggestion-chip").forEach(chip => {
-        chip.addEventListener("click", () => {
-            elements.promptInput.value = chip.dataset.prompt;
-            elements.sendBtn.disabled = false;
-            sendMessage();
-        });
+    // Password toggle
+    document.getElementById("togglePwd")?.addEventListener("click", () => {
+        const inp = document.getElementById("apiKeyInput");
+        inp.type = inp.type === "password" ? "text" : "password";
     });
 }
 
-function setupTextareaAutoResize() {
-    const textarea = elements.promptInput;
-    if (!textarea) return;
-    textarea.addEventListener("input", () => {
-        textarea.style.height = "auto";
-        textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px";
-    });
+function autoResize(el) {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
 }
 
-async function setupSelectionHandler() {
+function closeModal() {
+    document.getElementById("modal").classList.remove("open");
+}
+
+async function setupAutoRefresh() {
     try {
-        await Excel.run(async (context) => {
-            const sheet = context.workbook.worksheets.getActiveWorksheet();
-            sheet.onSelectionChanged.add(onSelectionChanged);
-            await context.sync();
+        await Excel.run(async (ctx) => {
+            ctx.workbook.worksheets.getActiveWorksheet().onSelectionChanged.add(refreshContext);
+            await ctx.sync();
         });
-    } catch (err) {
-        console.log("Selection handler setup skipped:", err.message);
-    }
-}
-
-async function onSelectionChanged() {
-    if (elements.useSelection?.checked) {
-        await refreshSelection();
-    }
+    } catch (e) { /* ignore */ }
 }
 
 // ============================================================================
-// Selection Management
+// Context Management
 // ============================================================================
-async function refreshSelection() {
-    const useSelection = elements.useSelection?.checked;
+async function refreshContext() {
+    const useContext = document.getElementById("useContext")?.checked;
+    const infoEl = document.getElementById("contextInfo");
     
-    if (!useSelection) {
-        elements.selectionText.textContent = "Selection disabled";
+    if (!useContext) {
+        infoEl.textContent = "Context off";
         state.selectionData = null;
         state.selectionAddress = "";
         return;
     }
     
     try {
-        await Excel.run(async (context) => {
-            const range = context.workbook.getSelectedRange();
-            range.load(["address", "values", "rowCount", "columnCount"]);
-            await context.sync();
+        await Excel.run(async (ctx) => {
+            const sheet = ctx.workbook.worksheets.getActiveWorksheet();
+            const range = ctx.workbook.getSelectedRange();
             
+            sheet.load("name");
+            range.load(["address", "values", "formulas", "numberFormat", "rowCount", "columnCount"]);
+            await ctx.sync();
+            
+            state.sheetName = sheet.name;
             state.selectionAddress = range.address;
-            state.selectionData = range.values;
+            state.selectionData = {
+                values: range.values,
+                formulas: range.formulas,
+                formats: range.numberFormat,
+                rows: range.rowCount,
+                cols: range.columnCount
+            };
             
-            elements.selectionText.textContent = `${range.address} (${range.rowCount}x${range.columnCount})`;
+            infoEl.textContent = `${range.address} · ${range.rowCount}×${range.columnCount}`;
         });
-    } catch (err) {
-        elements.selectionText.textContent = "No selection";
+    } catch (e) {
+        infoEl.textContent = "No selection";
+        state.selectionData = null;
     }
 }
 
 // ============================================================================
-// Chat & Messaging
+// Chat UI
 // ============================================================================
 function showChat() {
     if (state.isFirstMessage) {
-        elements.welcomeScreen.style.display = "none";
-        elements.chatContainer.classList.add("active");
+        document.getElementById("welcome").style.display = "none";
+        document.getElementById("chat").style.display = "flex";
         state.isFirstMessage = false;
     }
 }
 
-function addMessage(role, content, type = "normal") {
+function addMessage(role, content, type = "") {
     showChat();
     
-    const msgEl = document.createElement("div");
-    msgEl.className = `message ${role} ${type}`;
+    const chat = document.getElementById("chat");
+    const msg = document.createElement("div");
+    msg.className = `msg ${role} ${type}`;
     
-    const avatarIcon = role === "ai" ? "fa-microchip" : "fa-user";
-    const statusIcon = type === "action" ? '<i class="fas fa-check-circle status-icon success"></i>' : 
-                       type === "error" ? '<i class="fas fa-times-circle status-icon error"></i>' : '';
-    
-    msgEl.innerHTML = `
-        <div class="message-avatar">
-            <i class="fas ${avatarIcon}"></i>
-        </div>
-        <div class="message-content">
-            ${statusIcon}
-            <div class="message-text">${formatContent(content)}</div>
-        </div>
+    msg.innerHTML = `
+        <div class="msg-avatar">${role === "user" ? "U" : "AI"}</div>
+        <div class="msg-body">${formatText(content)}</div>
     `;
     
-    elements.chatContainer.appendChild(msgEl);
-    elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight;
+    chat.appendChild(msg);
+    chat.scrollTop = chat.scrollHeight;
 }
 
-function formatContent(content) {
-    let formatted = content
+function formatText(text) {
+    return text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    
-    // Remove emojis and replace with nothing
-    formatted = formatted.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, '');
-    
-    // Code blocks
-    formatted = formatted.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-        return `<pre><code>${code.trim()}</code></pre>`;
-    });
-    
-    // Inline code
-    formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
-    
-    // Bold
-    formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    
-    // Line breaks
-    formatted = formatted.replace(/\n/g, '<br>');
-    
-    return formatted;
+        .replace(/>/g, "&gt;")
+        .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre>$2</pre>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+        .replace(/\n/g, '<br>');
 }
 
 function showTyping() {
     showChat();
-    
-    const typingEl = document.createElement("div");
-    typingEl.className = "message ai";
-    typingEl.id = "typingIndicator";
-    typingEl.innerHTML = `
-        <div class="message-avatar">
-            <i class="fas fa-microchip"></i>
-        </div>
-        <div class="message-content">
-            <div class="typing-indicator">
-                <span></span><span></span><span></span>
-            </div>
-        </div>
-    `;
-    
-    elements.chatContainer.appendChild(typingEl);
-    elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight;
+    const chat = document.getElementById("chat");
+    const el = document.createElement("div");
+    el.className = "msg ai";
+    el.id = "typing";
+    el.innerHTML = `<div class="msg-avatar">AI</div><div class="msg-body"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
+    chat.appendChild(el);
+    chat.scrollTop = chat.scrollHeight;
 }
 
 function hideTyping() {
-    document.getElementById("typingIndicator")?.remove();
+    document.getElementById("typing")?.remove();
 }
 
-function clearConversation() {
+function clearChat() {
     state.conversationHistory = [];
-    elements.chatContainer.innerHTML = "";
-    elements.welcomeScreen.style.display = "flex";
-    elements.chatContainer.classList.remove("active");
+    state.pendingActions = [];
     state.isFirstMessage = true;
-    state.pendingAction = null;
-    elements.applyBtn.disabled = true;
-    showToast("Conversation cleared");
+    document.getElementById("chat").innerHTML = "";
+    document.getElementById("chat").style.display = "none";
+    document.getElementById("welcome").style.display = "flex";
+    document.getElementById("applyBtn").disabled = true;
+    toast("Cleared");
+}
+
+function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 2000);
 }
 
 // ============================================================================
-// AI Communication with Memory
+// AI Communication
 // ============================================================================
-async function sendMessage() {
-    const prompt = elements.promptInput.value.trim();
+async function handleSend() {
+    const input = document.getElementById("promptInput");
+    const prompt = input.value.trim();
     if (!prompt) return;
     
     if (!state.apiKey) {
-        openSettings();
-        showToast("Please set your API key first", "warning");
+        document.getElementById("settingsBtn").click();
+        toast("Enter API key");
         return;
     }
     
-    // Add user message to UI
     addMessage("user", prompt);
+    state.conversationHistory.push({ role: "user", parts: [{ text: prompt }] });
     
-    // Add to conversation history for memory
-    state.conversationHistory.push({
-        role: "user",
-        parts: [{ text: prompt }]
-    });
-    
-    // Trim history if too long
-    if (state.conversationHistory.length > CONFIG.MAX_HISTORY * 2) {
-        state.conversationHistory = state.conversationHistory.slice(-CONFIG.MAX_HISTORY * 2);
-    }
-    
-    elements.promptInput.value = "";
-    elements.promptInput.style.height = "auto";
-    elements.sendBtn.disabled = true;
+    input.value = "";
+    input.style.height = "auto";
+    document.getElementById("sendBtn").disabled = true;
     
     showTyping();
     
     try {
-        const response = await callGeminiAPIWithMemory();
+        const response = await callAI();
         hideTyping();
         
-        // Add AI response to history
-        state.conversationHistory.push({
-            role: "model",
-            parts: [{ text: response }]
-        });
+        state.conversationHistory.push({ role: "model", parts: [{ text: response }] });
         
-        const parsed = parseAIResponse(response);
-        state.lastResponse = parsed;
+        // Parse actions
+        const { message, actions } = parseResponse(response);
+        state.pendingActions = actions;
         
-        addMessage("ai", parsed.message, parsed.hasAction ? "action" : "normal");
+        addMessage("ai", message, actions.length ? "has-action" : "");
         
-        if (parsed.hasAction) {
-            elements.applyBtn.disabled = false;
-            state.pendingAction = parsed.action;
+        if (actions.length) {
+            document.getElementById("applyBtn").disabled = false;
         }
     } catch (err) {
         hideTyping();
-        addMessage("ai", `Error: ${err.message}`, "error");
+        addMessage("ai", "Error: " + err.message, "error");
     }
 }
 
-async function callGeminiAPIWithMemory() {
-    const systemInstruction = buildSystemPrompt();
-    const contextInfo = buildContextPrompt();
+async function callAI() {
+    const systemPrompt = getSystemPrompt();
+    const contextMsg = getContextMessage();
     
-    // Build contents array with conversation history
+    // Build conversation
     const contents = [];
     
-    // Add context as first user message if we have selection
-    if (state.selectionData && state.conversationHistory.length <= 2) {
-        contents.push({
-            role: "user",
-            parts: [{ text: `Current Excel context:\n${contextInfo}` }]
-        });
-        contents.push({
-            role: "model", 
-            parts: [{ text: "I understand. I can see your Excel data. How can I help you with it?" }]
-        });
+    // Add context at start
+    if (contextMsg && state.conversationHistory.length <= 2) {
+        contents.push({ role: "user", parts: [{ text: contextMsg }] });
+        contents.push({ role: "model", parts: [{ text: "I can see your data. What would you like me to do?" }] });
     }
     
-    // Add conversation history
-    contents.push(...state.conversationHistory);
+    // Add history
+    for (const msg of state.conversationHistory.slice(-CONFIG.MAX_HISTORY * 2)) {
+        contents.push(msg);
+    }
     
-    // If latest message needs context update, add it
-    if (state.selectionData && state.conversationHistory.length > 2) {
-        const lastUserMsg = contents[contents.length - 1];
-        if (lastUserMsg.role === "user") {
-            lastUserMsg.parts[0].text = `[Current selection: ${state.selectionAddress}]\n${lastUserMsg.parts[0].text}`;
+    // Update last user message with current context
+    if (contents.length && state.selectionData) {
+        const last = contents[contents.length - 1];
+        if (last.role === "user") {
+            last.parts[0].text = `[Selection: ${state.selectionAddress}]\n${last.parts[0].text}`;
         }
     }
     
-    const url = `${CONFIG.API_ENDPOINT}${CONFIG.GEMINI_MODEL}:generateContent?key=${encodeURIComponent(state.apiKey)}`;
-    
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemInstruction }] },
-            contents: contents,
-            generationConfig: { 
-                temperature: 0.7, 
-                maxOutputTokens: 2048 
-            }
-        })
-    });
-    
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API Error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("") || "";
-}
-
-function buildSystemPrompt() {
-    return `You are Excel AI Copilot, a professional assistant for Microsoft Excel. 
-
-IMPORTANT RULES:
-1. Remember the entire conversation context. If user refers to previous messages, use that context.
-2. Be concise and professional. No emojis.
-3. When user asks to "drag" or "fill" a formula, apply it to all cells in the range automatically.
-4. For running calculations, apply the formula to ALL cells in the target range, not just one cell.
-
-CAPABILITIES:
-- Analyze data, create formulas, generate charts, format cells
-- Apply formulas to multiple cells at once
-- Remember what was discussed earlier in the conversation
-
-ACTION FORMAT (when modifying the sheet):
-[ACTION]
-type: formula|values|format|chart
-target: cell reference (e.g., E8:E12) or "selection"
-data: the formula or data to apply
-[/ACTION]
-
-EXAMPLES:
-- For running sum in E8:E12, use target: E8:E12 and apply the formula to all cells
-- When user says "drag it" or "fill down", apply to the full range mentioned earlier
-
-Always provide the complete solution. If user asks to fill/drag, do it automatically.`;
-}
-
-function buildContextPrompt() {
-    if (!state.selectionData || !state.selectionAddress) {
-        return "No data selected.";
-    }
-    
-    const rows = Math.min(state.selectionData.length, CONFIG.MAX_CONTEXT_ROWS);
-    const cols = Math.min(state.selectionData[0]?.length || 0, CONFIG.MAX_CONTEXT_COLS);
-    
-    let dataStr = "";
-    for (let r = 0; r < rows; r++) {
-        const rowData = [];
-        for (let c = 0; c < cols; c++) {
-            rowData.push(state.selectionData[r][c] ?? "");
+    const res = await fetch(
+        `${CONFIG.API_ENDPOINT}${CONFIG.GEMINI_MODEL}:generateContent?key=${state.apiKey}`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents,
+                generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
+            })
         }
-        dataStr += rowData.join("\t") + "\n";
-    }
+    );
     
-    return `Selected: ${state.selectionAddress} (${state.selectionData.length} rows x ${state.selectionData[0]?.length || 0} cols)\n\nData:\n${dataStr}`;
+    if (!res.ok) throw new Error("API request failed");
+    
+    const data = await res.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
-function parseAIResponse(response) {
-    const actionMatch = response.match(/\[ACTION\]([\s\S]*?)\[\/ACTION\]/);
+function getSystemPrompt() {
+    return `You are Excel Copilot, an expert Excel assistant. You help users with formulas, data analysis, formatting, and automation.
+
+## RULES
+1. Be concise and professional
+2. Remember conversation context
+3. When user asks to apply something to multiple cells, ALWAYS specify the full range
+4. For formulas that need to be filled down, provide the formula AND specify the full target range
+
+## ACTIONS
+When you need to modify Excel, include action blocks:
+
+<ACTION type="formula" target="E2:E10">
+=SUM($B$2:B2)
+</ACTION>
+
+<ACTION type="values" target="A1:B2">
+[["Name","Age"],["John",25]]
+</ACTION>
+
+<ACTION type="format" target="A1:D1">
+{"bold":true,"fill":"#4472C4","fontColor":"#FFFFFF"}
+</ACTION>
+
+<ACTION type="autofill" source="E2" target="E2:E10">
+</ACTION>
+
+## ACTION TYPES
+- formula: Apply formula to range (will auto-adjust relative refs)
+- values: Set cell values (JSON 2D array)
+- format: Apply formatting (JSON object)
+- autofill: Fill formula from source to target range
+- chart: Create chart (specify type: line/bar/pie/column)
+- sort: Sort range (specify column and order)
+- filter: Apply filter
+
+## IMPORTANT
+- Always use full range like "E2:E10" not just "E2"
+- For running totals/cumulative, use autofill action
+- Provide clear explanation before action blocks`;
+}
+
+function getContextMessage() {
+    if (!state.selectionData) return "";
     
-    if (actionMatch) {
-        const actionBlock = actionMatch[1];
-        const typeMatch = actionBlock.match(/type:\s*(\w+)/);
-        const targetMatch = actionBlock.match(/target:\s*([^\n]+)/);
-        const dataMatch = actionBlock.match(/data:\s*([\s\S]*?)(?=\n\w+:|$)/);
-        
-        const message = response.replace(/\[ACTION\][\s\S]*?\[\/ACTION\]/, "").trim();
-        
-        return {
-            message: message || "Ready to apply changes.",
-            hasAction: true,
-            action: {
-                type: typeMatch?.[1]?.trim() || "value",
-                target: targetMatch?.[1]?.trim() || "selection",
-                data: dataMatch?.[1]?.trim() || ""
-            }
-        };
+    const { values, rows, cols } = state.selectionData;
+    const maxRows = Math.min(rows, 50);
+    const maxCols = Math.min(cols, 20);
+    
+    let data = "";
+    for (let r = 0; r < maxRows; r++) {
+        const row = [];
+        for (let c = 0; c < maxCols; c++) {
+            row.push(values[r]?.[c] ?? "");
+        }
+        data += row.join("\t") + "\n";
     }
     
-    return { message: response, hasAction: false, action: null };
+    return `Sheet: ${state.sheetName}
+Selection: ${state.selectionAddress} (${rows} rows × ${cols} cols)
+
+Data:
+${data}`;
+}
+
+function parseResponse(text) {
+    const actions = [];
+    const actionRegex = /<ACTION\s+([^>]+)>([\s\S]*?)<\/ACTION>/g;
+    
+    let match;
+    while ((match = actionRegex.exec(text)) !== null) {
+        const attrs = match[1];
+        const content = match[2].trim();
+        
+        const type = attrs.match(/type="([^"]+)"/)?.[1] || "formula";
+        const target = attrs.match(/target="([^"]+)"/)?.[1] || "selection";
+        const source = attrs.match(/source="([^"]+)"/)?.[1] || "";
+        
+        actions.push({ type, target, source, data: content });
+    }
+    
+    const message = text.replace(/<ACTION[\s\S]*?<\/ACTION>/g, "").trim();
+    
+    return { message: message || "Ready to apply.", actions };
 }
 
 // ============================================================================
-// Apply Changes
+// Apply Actions
 // ============================================================================
-async function applyChanges() {
-    if (!state.pendingAction) {
-        showToast("No changes to apply", "error");
+async function handleApply() {
+    if (!state.pendingActions.length) {
+        toast("Nothing to apply");
         return;
     }
     
-    const action = state.pendingAction;
+    const applyBtn = document.getElementById("applyBtn");
+    applyBtn.disabled = true;
+    applyBtn.textContent = "Applying...";
     
     try {
-        await Excel.run(async (context) => {
-            const sheet = context.workbook.worksheets.getActiveWorksheet();
-            let targetRange;
+        await Excel.run(async (ctx) => {
+            const sheet = ctx.workbook.worksheets.getActiveWorksheet();
             
-            if (action.target === "selection" || !action.target) {
-                targetRange = context.workbook.getSelectedRange();
-            } else {
-                targetRange = sheet.getRange(action.target);
+            for (const action of state.pendingActions) {
+                await executeAction(ctx, sheet, action);
             }
             
-            targetRange.load(["rowCount", "columnCount", "address"]);
-            await context.sync();
-            
-            switch (action.type) {
-                case "formula":
-                    await applyFormulaToRange(context, sheet, targetRange, action.data);
-                    break;
-                case "values":
-                case "value":
-                    await applyValues(targetRange, action.data);
-                    break;
-                case "format":
-                    applyFormat(targetRange, action.data);
-                    break;
-                case "chart":
-                    createChart(sheet, targetRange, action.data);
-                    break;
-                default:
-                    targetRange.values = [[action.data]];
-            }
-            
-            await context.sync();
+            await ctx.sync();
         });
         
-        addMessage("ai", "Changes applied successfully.", "action");
-        showToast("Applied");
-        
-        state.pendingAction = null;
-        elements.applyBtn.disabled = true;
-        
-        await refreshSelection();
+        addMessage("ai", "Changes applied successfully.", "success");
+        toast("Applied");
+        state.pendingActions = [];
+        await refreshContext();
     } catch (err) {
-        addMessage("ai", `Failed to apply: ${err.message}`, "error");
-        showToast("Failed", "error");
+        addMessage("ai", "Failed: " + err.message, "error");
+        toast("Failed");
+        applyBtn.disabled = false;
+    }
+    
+    applyBtn.textContent = "Apply Changes";
+}
+
+async function executeAction(ctx, sheet, action) {
+    const { type, target, source, data } = action;
+    
+    let range;
+    if (target === "selection") {
+        range = ctx.workbook.getSelectedRange();
+    } else {
+        range = sheet.getRange(target);
+    }
+    
+    range.load(["rowCount", "columnCount", "address"]);
+    await ctx.sync();
+    
+    switch (type) {
+        case "formula":
+            await applyFormula(ctx, range, data);
+            break;
+            
+        case "values":
+            applyValues(range, data);
+            break;
+            
+        case "format":
+            applyFormat(range, data);
+            break;
+            
+        case "autofill":
+            await applyAutofill(ctx, sheet, source, target);
+            break;
+            
+        case "chart":
+            createChart(sheet, range, data);
+            break;
+            
+        case "sort":
+            await applySort(range, data);
+            break;
+            
+        default:
+            range.values = [[data]];
     }
 }
 
-async function applyFormulaToRange(context, sheet, targetRange, formula) {
-    const rowCount = targetRange.rowCount;
-    const colCount = targetRange.columnCount;
+async function applyFormula(ctx, range, formula) {
+    const rows = range.rowCount;
+    const cols = range.columnCount;
     
-    // If single cell, just apply formula
-    if (rowCount === 1 && colCount === 1) {
-        targetRange.formulas = [[formula]];
+    if (rows === 1 && cols === 1) {
+        range.formulas = [[formula]];
         return;
     }
     
-    // For multiple cells, we need to apply formula with relative references
-    // Get the starting cell address
-    const address = targetRange.address;
-    const match = address.match(/([A-Z]+)(\d+)/);
-    if (!match) {
-        targetRange.formulas = [[formula]];
+    // Parse the starting cell from range address
+    const addr = range.address.split("!").pop();
+    const startMatch = addr.match(/([A-Z]+)(\d+)/);
+    if (!startMatch) {
+        range.formulas = [[formula]];
         return;
     }
     
-    const startCol = match[1];
-    const startRow = parseInt(match[2]);
+    const startRow = parseInt(startMatch[2]);
     
-    // Create formula array for all cells
+    // Build formula array with adjusted row references
     const formulas = [];
-    for (let r = 0; r < rowCount; r++) {
+    for (let r = 0; r < rows; r++) {
         const rowFormulas = [];
-        for (let c = 0; c < colCount; c++) {
-            // Adjust formula for each row
-            let adjustedFormula = formula;
-            
-            // Replace row numbers in formula (simple adjustment)
+        for (let c = 0; c < cols; c++) {
+            let f = formula;
             if (r > 0) {
-                adjustedFormula = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (match, dollarCol, col, dollarRow, row) => {
-                    if (dollarRow === '$') {
-                        return match; // Absolute row reference, don't change
-                    }
-                    const newRow = parseInt(row) + r;
-                    return `${dollarCol}${col}${dollarRow}${newRow}`;
+                // Adjust non-absolute row references
+                f = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (m, d1, col, d2, row) => {
+                    if (d2 === "$") return m; // Absolute row
+                    return `${d1}${col}${d2}${parseInt(row) + r}`;
                 });
             }
-            rowFormulas.push(adjustedFormula);
+            rowFormulas.push(f);
         }
         formulas.push(rowFormulas);
     }
     
-    targetRange.formulas = formulas;
+    range.formulas = formulas;
 }
 
-async function applyValues(targetRange, data) {
+function applyValues(range, data) {
     let values;
     try {
         values = JSON.parse(data);
         if (!Array.isArray(values)) values = [[values]];
-        else if (!Array.isArray(values[0])) values = [values];
+        if (!Array.isArray(values[0])) values = [values];
     } catch {
         values = [[data]];
     }
+    range.values = values;
+}
+
+function applyFormat(range, data) {
+    let fmt;
+    try {
+        fmt = JSON.parse(data);
+    } catch {
+        fmt = {};
+    }
     
-    if (values.length > 1 || values[0]?.length > 1) {
-        targetRange = targetRange.getCell(0, 0).getResizedRange(values.length - 1, values[0].length - 1);
-    }
-    targetRange.values = values;
-}
-
-function applyFormat(range, formatData) {
-    const data = formatData.toLowerCase();
-    if (data.includes("bold")) range.format.font.bold = true;
-    if (data.includes("italic")) range.format.font.italic = true;
-    if (data.includes("currency")) range.numberFormat = [["$#,##0.00"]];
-    if (data.includes("percent")) range.numberFormat = [["0.00%"]];
-    if (data.includes("header")) {
-        range.format.font.bold = true;
-        range.format.fill.color = "#1a1a2e";
-        range.format.font.color = "#FFFFFF";
+    if (fmt.bold) range.format.font.bold = true;
+    if (fmt.italic) range.format.font.italic = true;
+    if (fmt.fill) range.format.fill.color = fmt.fill;
+    if (fmt.fontColor) range.format.font.color = fmt.fontColor;
+    if (fmt.fontSize) range.format.font.size = fmt.fontSize;
+    if (fmt.numberFormat) range.numberFormat = [[fmt.numberFormat]];
+    if (fmt.align) range.format.horizontalAlignment = fmt.align;
+    if (fmt.border) {
+        range.format.borders.getItem("EdgeTop").style = "Continuous";
+        range.format.borders.getItem("EdgeBottom").style = "Continuous";
+        range.format.borders.getItem("EdgeLeft").style = "Continuous";
+        range.format.borders.getItem("EdgeRight").style = "Continuous";
     }
 }
 
-function createChart(sheet, dataRange, chartData) {
-    const data = chartData.toLowerCase();
+async function applyAutofill(ctx, sheet, source, target) {
+    const sourceRange = sheet.getRange(source);
+    const targetRange = sheet.getRange(target);
+    sourceRange.autoFill(targetRange, Excel.AutoFillType.fillDefault);
+}
+
+function createChart(sheet, dataRange, data) {
     let chartType = Excel.ChartType.columnClustered;
+    const d = data.toLowerCase();
     
-    if (data.includes("line")) chartType = Excel.ChartType.line;
-    else if (data.includes("pie")) chartType = Excel.ChartType.pie;
-    else if (data.includes("bar")) chartType = Excel.ChartType.barClustered;
-    else if (data.includes("area")) chartType = Excel.ChartType.area;
+    if (d.includes("line")) chartType = Excel.ChartType.line;
+    else if (d.includes("pie")) chartType = Excel.ChartType.pie;
+    else if (d.includes("bar")) chartType = Excel.ChartType.barClustered;
+    else if (d.includes("area")) chartType = Excel.ChartType.area;
+    else if (d.includes("scatter")) chartType = Excel.ChartType.xyscatter;
     
     const chart = sheet.charts.add(chartType, dataRange, Excel.ChartSeriesBy.auto);
-    chart.setPosition("H2", "O15");
+    chart.setPosition("H2", "P17");
     chart.title.text = "Chart";
+    chart.legend.position = Excel.ChartLegendPosition.bottom;
 }
 
-// ============================================================================
-// Settings
-// ============================================================================
-function openSettings() {
-    elements.apiKeyInput.value = state.apiKey;
-    elements.settingsModal.classList.add("active");
-}
-
-function closeSettings() {
-    elements.settingsModal.classList.remove("active");
-}
-
-function saveSettings() {
-    const key = elements.apiKeyInput.value.trim();
-    state.apiKey = key;
-    localStorage.setItem(CONFIG.STORAGE_KEY, key);
-    closeSettings();
-    showToast("Saved");
-}
-
-// ============================================================================
-// Toast
-// ============================================================================
-function showToast(message, type = "success") {
-    const icon = elements.toast.querySelector("i");
-    icon.className = type === "success" ? "fas fa-check-circle" : "fas fa-exclamation-triangle";
-    
-    elements.toastMessage.textContent = message;
-    elements.toast.classList.add("show");
-    elements.toast.classList.toggle("error", type !== "success");
-    
-    setTimeout(() => elements.toast.classList.remove("show"), 2500);
+async function applySort(range, data) {
+    const opts = typeof data === "string" ? { column: 0, ascending: true } : data;
+    range.sort.apply([{
+        key: opts.column || 0,
+        ascending: opts.ascending !== false
+    }]);
 }
 
 // ============================================================================
 // Exports
 // ============================================================================
-export { sendMessage, applyChanges, refreshSelection, clearConversation };
+export { handleSend, handleApply, refreshContext, clearChat };
