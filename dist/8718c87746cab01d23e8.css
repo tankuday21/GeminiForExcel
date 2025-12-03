@@ -1157,3 +1157,150 @@ body {
     border-radius: 4px;
     font-family: ui-monospace, monospace;
 }
+
+/* Task Type Indicator */
+.task-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-2);
+    margin-bottom: 8px;
+    animation: fadeIn 0.2s ease;
+}
+
+.task-indicator.formula {
+    background: rgba(124, 58, 237, 0.1);
+    border-color: rgba(124, 58, 237, 0.3);
+    color: #7c3aed;
+}
+
+.task-indicator.chart {
+    background: rgba(37, 99, 235, 0.1);
+    border-color: rgba(37, 99, 235, 0.3);
+    color: #2563eb;
+}
+
+.task-indicator.analysis {
+    background: rgba(5, 150, 105, 0.1);
+    border-color: rgba(5, 150, 105, 0.3);
+    color: #059669;
+}
+
+.task-indicator.format {
+    background: rgba(217, 119, 6, 0.1);
+    border-color: rgba(217, 119, 6, 0.3);
+    color: #d97706;
+}
+
+.task-indicator.data_entry {
+    background: rgba(8, 145, 178, 0.1);
+    border-color: rgba(8, 145, 178, 0.3);
+    color: #0891b2;
+}
+
+.task-indicator.validation {
+    background: rgba(220, 38, 38, 0.1);
+    border-color: rgba(220, 38, 38, 0.3);
+    color: #dc2626;
+}
+
+.task-indicator.general {
+    background: var(--bg-alt);
+    border-color: var(--border);
+    color: var(--text-2);
+}
+
+/* Correction message styling */
+.msg.correction .msg-body {
+    border-left: 3px solid var(--warning);
+    background: rgba(217, 119, 6, 0.1);
+}
+
+[data-theme="dark"] .msg.correction .msg-body {
+    background: rgba(217, 119, 6, 0.15);
+}
+
+/* Settings section styling */
+.settings-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+
+.settings-section label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-2);
+    margin-bottom: 6px;
+}
+
+.btn-secondary {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    cursor: pointer;
+    transition: 0.15s;
+    margin-top: 8px;
+}
+
+.btn-secondary:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-3);
+}
+
+/* Multi-step reasoning indicator */
+.reasoning-steps {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.reasoning-step {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--bg-alt);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--text-3);
+}
+
+.reasoning-step.active {
+    background: var(--primary);
+    color: #fff;
+}
+
+.reasoning-step.complete {
+    background: var(--success);
+    color: #fff;
+}
+
+/* Learning indicator */
+.learning-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    background: rgba(5, 150, 105, 0.1);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--success);
+    margin-left: 6px;
+}
+
+.learning-badge svg {
+    width: 10px;
+    height: 10px;
+}

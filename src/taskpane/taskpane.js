@@ -1,8 +1,21 @@
 /*
  * Excel AI Copilot - Accurate Data Understanding
+ * Enhanced with: Task-specific prompts, Function calling, RAG, Multi-step reasoning, Learning
  */
 
 /* global document, Excel, Office, fetch, localStorage */
+
+import {
+    detectTaskType,
+    TASK_TYPES,
+    enhancePrompt,
+    isCorrection,
+    handleCorrection,
+    processResponse,
+    getRAGContext,
+    getCorrectionContext,
+    clearCorrections
+} from "./ai-engine.js";
 
 const CONFIG = {
     GEMINI_MODEL: "gemini-2.0-flash",
@@ -20,6 +33,8 @@ const state = {
     currentData: null,
     conversationHistory: [],
     isFirstMessage: true,
+    lastAIResponse: "",      // Track last AI response for corrections
+    currentTaskType: null,   // Track current task type
     // Preview state
     preview: {
         selections: [],      // boolean[] - selection state for each action
@@ -100,6 +115,11 @@ function bindEvents() {
     
     document.getElementById("modal")?.addEventListener("click", (e) => {
         if (e.target.id === "modal") closeModal();
+    });
+    
+    // Clear learned preferences button
+    document.getElementById("clearPrefsBtn")?.addEventListener("click", () => {
+        clearLearnedCorrections();
     });
     
     document.getElementById("clearBtn")?.addEventListener("click", clearChat);
@@ -422,6 +442,8 @@ function clearChat() {
     state.conversationHistory = [];
     state.pendingActions = [];
     state.isFirstMessage = true;
+    state.lastAIResponse = "";
+    state.currentTaskType = null;
     state.preview.selections = [];
     state.preview.expandedIndex = -1;
     document.getElementById("chat").innerHTML = "";
@@ -429,7 +451,16 @@ function clearChat() {
     document.getElementById("welcome").style.display = "flex";
     document.getElementById("applyBtn").disabled = true;
     hidePreviewPanel();
+    hideTaskTypeIndicator();
     toast("Cleared");
+}
+
+/**
+ * Clears learned corrections (accessible via settings or command)
+ */
+function clearLearnedCorrections() {
+    clearCorrections();
+    toast("Learned preferences cleared");
 }
 
 function toast(msg) {
@@ -455,7 +486,17 @@ async function handleSend() {
     
     await readExcelData();
     
-    addMessage("user", prompt);
+    // Detect task type and show indicator
+    const taskType = detectTaskType(prompt);
+    const isCorrectionMsg = isCorrection(prompt);
+    
+    // Add user message with task type badge
+    addMessage("user", prompt, isCorrectionMsg ? "correction" : "");
+    
+    // Show task type indicator
+    if (!isCorrectionMsg) {
+        showTaskTypeIndicator(taskType);
+    }
     
     input.value = "";
     input.style.height = "auto";
@@ -469,11 +510,16 @@ async function handleSend() {
         const response = await callAI(prompt);
         hideTyping();
         hideLoadingSkeleton();
+        hideTaskTypeIndicator();
         
         const { message, actions } = parseResponse(response);
         state.pendingActions = actions;
         
-        addMessage("ai", message, actions.length ? "has-action" : "");
+        // Add task type badge to AI response
+        const taskBadge = getTaskTypeBadge(state.currentTaskType);
+        const enhancedMessage = taskBadge + message;
+        
+        addMessage("ai", enhancedMessage, actions.length ? "has-action" : "");
         
         if (actions.length) {
             // Initialize preview state and show preview panel
@@ -495,21 +541,82 @@ async function handleSend() {
     } catch (err) {
         hideTyping();
         hideLoadingSkeleton();
+        hideTaskTypeIndicator();
         addMessage("ai", getErrorMessage(err), "error");
     }
 }
 
+/**
+ * Shows task type indicator during processing
+ */
+function showTaskTypeIndicator(taskType) {
+    const labels = {
+        [TASK_TYPES.FORMULA]: "🔢 Formula Mode",
+        [TASK_TYPES.CHART]: "📊 Chart Mode",
+        [TASK_TYPES.ANALYSIS]: "📈 Analysis Mode",
+        [TASK_TYPES.FORMAT]: "🎨 Format Mode",
+        [TASK_TYPES.DATA_ENTRY]: "✏️ Data Entry Mode",
+        [TASK_TYPES.VALIDATION]: "✅ Validation Mode",
+        [TASK_TYPES.GENERAL]: "💡 General Mode"
+    };
+    
+    const indicator = document.getElementById("taskTypeIndicator");
+    if (indicator) {
+        indicator.textContent = labels[taskType] || labels[TASK_TYPES.GENERAL];
+        indicator.className = `task-indicator ${taskType}`;
+        indicator.style.display = "block";
+    }
+}
+
+/**
+ * Hides task type indicator
+ */
+function hideTaskTypeIndicator() {
+    const indicator = document.getElementById("taskTypeIndicator");
+    if (indicator) {
+        indicator.style.display = "none";
+    }
+}
+
+/**
+ * Gets a badge string for the task type
+ */
+function getTaskTypeBadge(taskType) {
+    const badges = {
+        [TASK_TYPES.FORMULA]: "**[Formula]** ",
+        [TASK_TYPES.CHART]: "**[Chart]** ",
+        [TASK_TYPES.ANALYSIS]: "**[Analysis]** ",
+        [TASK_TYPES.FORMAT]: "**[Format]** ",
+        [TASK_TYPES.DATA_ENTRY]: "**[Data]** ",
+        [TASK_TYPES.VALIDATION]: "**[Validation]** ",
+        [TASK_TYPES.GENERAL]: ""
+    };
+    return badges[taskType] || "";
+}
+
 async function callAI(userPrompt) {
     const dataContext = buildDataContext();
-    const systemPrompt = getSystemPrompt();
     
-    const fullUserMessage = `${dataContext}\n\n---\nUSER REQUEST: ${userPrompt}`;
+    // Use AI engine to enhance the prompt with task-specific context
+    const enhanced = enhancePrompt(userPrompt, state.currentData);
+    state.currentTaskType = enhanced.taskType;
+    
+    // Handle corrections - learn from user feedback
+    if (enhanced.isCorrection && state.lastAIResponse) {
+        handleCorrection(userPrompt, state.lastAIResponse);
+    }
+    
+    // Build the enhanced system prompt
+    const systemPrompt = enhanced.systemPrompt;
+    
+    // Build the enhanced user message
+    const fullUserMessage = `${dataContext}\n\n---\nUSER REQUEST: ${enhanced.userPrompt}`;
     
     const contents = [...state.conversationHistory];
     contents.push({ role: "user", parts: [{ text: fullUserMessage }] });
     
     // Use retry logic for transient errors
-    return await withRetry(async () => {
+    const response = await withRetry(async () => {
         const res = await fetch(
             `${CONFIG.API_ENDPOINT}${CONFIG.GEMINI_MODEL}:generateContent?key=${state.apiKey}`,
             {
@@ -528,6 +635,14 @@ async function callAI(userPrompt) {
         const data = await res.json();
         return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
     });
+    
+    // Store response for potential correction learning
+    state.lastAIResponse = response;
+    
+    // Process response for any function calls
+    const processed = processResponse(response);
+    
+    return processed.response;
 }
 
 function buildDataContext() {
@@ -611,93 +726,12 @@ function buildDataContext() {
     return context;
 }
 
+// Note: getSystemPrompt is now handled by ai-engine.js via enhancePrompt()
+// This function is kept as a fallback but is no longer the primary source
 function getSystemPrompt() {
-    return `You are Excel Copilot, an expert Excel assistant. You have COMPLETE access to the user's Excel data.
-
-## CRITICAL RULES
-
-1. **CHECK THE COLUMN STRUCTURE TABLE** - Find the exact column letter for each header name
-2. **State column might be E, F, or any letter** - ALWAYS verify by looking at the table
-3. **Data starts at row 2** (row 1 is headers)
-
-## HOW TO CREATE A DROPDOWN
-
-For a dropdown of values from a column:
-1. Look at COLUMN STRUCTURE to find the correct column letter
-2. Use the validation action with the source range
-
-Example: If "State" is in column E with data from row 2 to row 100:
-
-<ACTION type="validation" target="K10" source="E2:E100">
-</ACTION>
-
-That's it! Just one action. The source should be the actual data range (e.g., E2:E100).
-
-## ACTION TYPES
-
-**Dropdown/Validation:**
-<ACTION type="validation" target="CELL" source="DATARANGE">
-</ACTION>
-
-**Formula:**
-<ACTION type="formula" target="CELL_OR_RANGE">
-=YOUR_FORMULA
-</ACTION>
-
-**Values:**
-<ACTION type="values" target="RANGE">
-[["val1","val2"],["val3","val4"]]
-</ACTION>
-
-**Format:**
-<ACTION type="format" target="RANGE">
-{"bold":true,"fill":"#4472C4","fontColor":"#FFFFFF"}
-</ACTION>
-
-**Chart:**
-<ACTION type="chart" target="DATARANGE" chartType="TYPE" title="TITLE" position="CELL">
-</ACTION>
-
-## CHART TYPES
-- **column** - Vertical bar chart (default, good for comparing categories)
-- **bar** - Horizontal bar chart (good for long category names)
-- **line** - Line chart (good for trends over time)
-- **pie** - Pie chart (good for showing parts of a whole, use with 1 data series)
-- **area** - Area chart (good for cumulative totals over time)
-- **scatter** - XY Scatter plot (good for correlation between 2 variables)
-- **doughnut** - Like pie but with hole in center
-- **radar** - Spider/radar chart (good for comparing multiple variables)
-
-## CHART EXAMPLES
-
-**Sales by Region (Column Chart):**
-<ACTION type="chart" target="A1:B10" chartType="column" title="Sales by Region" position="H2">
-</ACTION>
-
-**Trend Over Time (Line Chart):**
-<ACTION type="chart" target="A1:C20" chartType="line" title="Monthly Trend" position="H2">
-</ACTION>
-
-**Market Share (Pie Chart):**
-<ACTION type="chart" target="A1:B5" chartType="pie" title="Market Share" position="H2">
-</ACTION>
-
-**Comparison (Bar Chart):**
-<ACTION type="chart" target="A1:D10" chartType="bar" title="Product Comparison" position="H2">
-</ACTION>
-
-## CHART TIPS
-- Include headers in the data range (first row/column as labels)
-- For pie charts, use only 2 columns (labels + values)
-- Position is where the top-left of chart will be placed
-- Choose chart type based on what story the data tells
-
-## IMPORTANT
-
-- ALWAYS check COLUMN STRUCTURE first
-- For dropdowns, source is the data column range (e.g., E2:E100)
-- Don't use UNIQUE formula for dropdowns - just use the source range directly
-- For charts, include the header row in the target range`;
+    return `You are Excel Copilot, an expert Excel assistant.
+Check COLUMN STRUCTURE first. Data starts at row 2.
+Use ACTION tags for: formula, values, format, chart, validation.`;
 }
 
 function parseResponse(text) {

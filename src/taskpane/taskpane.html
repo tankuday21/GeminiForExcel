@@ -103,6 +103,7 @@
         </div>
 
         <div class="input-area">
+            <div id="taskTypeIndicator" class="task-indicator" style="display: none;"></div>
             <div id="smartSuggestions" class="smart-suggestions" style="display: none;"></div>
             <div class="input-box">
                 <textarea id="promptInput" placeholder="Ask me anything... (Ctrl+Enter to send)" rows="1"></textarea>
@@ -137,6 +138,12 @@
                     </button>
                 </div>
                 <p class="hint">Get your free key at <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a></p>
+                
+                <div class="settings-section">
+                    <label>AI Learning</label>
+                    <p class="hint">The AI learns from your corrections to improve future suggestions.</p>
+                    <button class="btn-secondary" id="clearPrefsBtn">Clear Learned Preferences</button>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn-cancel" id="cancelBtn">Cancel</button>
