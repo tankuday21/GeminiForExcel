@@ -450,9 +450,46 @@ body {
     height: 16px;
 }
 
-.apply-btn {
-    width: 100%;
+/* Action Buttons Row */
+.action-buttons {
+    display: flex;
+    gap: 8px;
     margin-top: 10px;
+}
+
+.undo-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: 0.15s;
+}
+
+.undo-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--text-3);
+}
+
+.undo-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.undo-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.apply-btn {
+    flex: 1;
     padding: 10px;
     border: none;
     background: var(--success);
