@@ -204,10 +204,16 @@ async function readExcelData() {
             };
             
             infoEl.textContent = `${sheetName}: ${rowCount} rows × ${colCount} cols`;
+            
+            // Show smart suggestions based on data
+            if (state.isFirstMessage) {
+                showSmartSuggestions();
+            }
         });
     } catch (e) {
         infoEl.textContent = "No data";
         state.currentData = null;
+        hideSmartSuggestions();
     }
 }
 
@@ -259,6 +265,154 @@ function showTyping() {
 
 function hideTyping() {
     document.getElementById("typing")?.remove();
+}
+
+// ============================================================================
+// Loading Skeleton
+// ============================================================================
+
+function showLoadingSkeleton() {
+    showChat();
+    const chat = document.getElementById("chat");
+    const el = document.createElement("div");
+    el.className = "skeleton-msg";
+    el.id = "loading-skeleton";
+    el.innerHTML = `
+        <div class="skeleton skeleton-avatar"></div>
+        <div class="skeleton-content">
+            <div class="skeleton skeleton-line" style="width: 90%"></div>
+            <div class="skeleton skeleton-line" style="width: 75%"></div>
+            <div class="skeleton skeleton-line" style="width: 60%"></div>
+        </div>
+    `;
+    chat.appendChild(el);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function hideLoadingSkeleton() {
+    document.getElementById("loading-skeleton")?.remove();
+}
+
+// ============================================================================
+// Smart Suggestions
+// ============================================================================
+
+function generateSmartSuggestions() {
+    const suggestions = [];
+    const data = state.currentData;
+    
+    if (!data) return suggestions;
+    
+    // Based on data characteristics
+    if (data.rowCount > 5) {
+        suggestions.push({ icon: '📊', text: 'Summarize this data', prompt: 'Summarize this data and give me key statistics' });
+    }
+    
+    // Check for numeric columns
+    const hasNumbers = data.values.some(row => row.some(cell => typeof cell === 'number'));
+    if (hasNumbers) {
+        suggestions.push({ icon: '➕', text: 'Add totals', prompt: 'Add SUM formulas for all numeric columns' });
+        suggestions.push({ icon: '📈', text: 'Create chart', prompt: 'Create a chart to visualize this data' });
+    }
+    
+    // Check for potential duplicates
+    if (data.rowCount > 10) {
+        suggestions.push({ icon: '🔍', text: 'Find duplicates', prompt: 'Check for duplicate values in this data' });
+    }
+    
+    // Check column headers for common patterns
+    const headers = data.headers.map(h => String(h).toLowerCase());
+    if (headers.some(h => h.includes('date') || h.includes('time'))) {
+        suggestions.push({ icon: '📅', text: 'Sort by date', prompt: 'Sort this data by date column' });
+    }
+    if (headers.some(h => h.includes('price') || h.includes('amount') || h.includes('cost'))) {
+        suggestions.push({ icon: '💰', text: 'Calculate totals', prompt: 'Calculate the total of all monetary values' });
+    }
+    if (headers.some(h => h.includes('email'))) {
+        suggestions.push({ icon: '✉️', text: 'Validate emails', prompt: 'Check if all email addresses are valid' });
+    }
+    
+    return suggestions.slice(0, 4); // Max 4 suggestions
+}
+
+function showSmartSuggestions() {
+    const container = document.getElementById("smartSuggestions");
+    if (!container) return;
+    
+    const suggestions = generateSmartSuggestions();
+    
+    if (suggestions.length === 0) {
+        container.style.display = "none";
+        return;
+    }
+    
+    container.innerHTML = suggestions.map(s => `
+        <button class="smart-suggestion" data-prompt="${s.prompt}">
+            <span>${s.icon}</span> ${s.text}
+        </button>
+    `).join('');
+    
+    container.style.display = "flex";
+    
+    // Bind click events
+    container.querySelectorAll(".smart-suggestion").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.getElementById("promptInput").value = btn.dataset.prompt;
+            document.getElementById("sendBtn").disabled = false;
+            container.style.display = "none";
+            handleSend();
+        });
+    });
+}
+
+function hideSmartSuggestions() {
+    const container = document.getElementById("smartSuggestions");
+    if (container) container.style.display = "none";
+}
+
+// ============================================================================
+// Formula Explanation
+// ============================================================================
+
+function explainFormula(formula) {
+    const explanations = {
+        'SUM': 'Adds all numbers in a range',
+        'AVERAGE': 'Calculates the average of numbers',
+        'COUNT': 'Counts cells with numbers',
+        'COUNTA': 'Counts non-empty cells',
+        'MAX': 'Returns the largest value',
+        'MIN': 'Returns the smallest value',
+        'IF': 'Returns one value if true, another if false',
+        'VLOOKUP': 'Looks up a value in the first column and returns a value in the same row',
+        'XLOOKUP': 'Searches a range and returns a matching item',
+        'INDEX': 'Returns a value at a given position',
+        'MATCH': 'Returns the position of a value in a range',
+        'CONCATENATE': 'Joins text strings together',
+        'LEFT': 'Returns characters from the start of text',
+        'RIGHT': 'Returns characters from the end of text',
+        'MID': 'Returns characters from the middle of text',
+        'LEN': 'Returns the length of text',
+        'TRIM': 'Removes extra spaces from text',
+        'UPPER': 'Converts text to uppercase',
+        'LOWER': 'Converts text to lowercase',
+        'ROUND': 'Rounds a number to specified digits',
+        'SUMIF': 'Adds cells that meet a condition',
+        'COUNTIF': 'Counts cells that meet a condition',
+        'IFERROR': 'Returns a value if there is an error',
+        'TODAY': 'Returns the current date',
+        'NOW': 'Returns the current date and time',
+        'YEAR': 'Returns the year from a date',
+        'MONTH': 'Returns the month from a date',
+        'DAY': 'Returns the day from a date'
+    };
+    
+    // Extract function name from formula
+    const match = formula.match(/=?([A-Z]+)\(/i);
+    if (match) {
+        const funcName = match[1].toUpperCase();
+        return explanations[funcName] || `${funcName} function`;
+    }
+    return 'Excel formula';
 }
 
 function clearChat() {

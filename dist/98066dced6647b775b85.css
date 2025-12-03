@@ -1026,3 +1026,134 @@ body {
 .toast.warning {
     background: var(--warning);
 }
+
+
+/* Loading Skeleton */
+.skeleton {
+    background: linear-gradient(90deg, var(--bg-alt) 25%, var(--bg-hover) 50%, var(--bg-alt) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.skeleton-msg {
+    display: flex;
+    gap: 10px;
+    padding: 12px 0;
+}
+
+.skeleton-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+}
+
+.skeleton-content {
+    flex: 1;
+}
+
+.skeleton-line {
+    height: 14px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+}
+
+.skeleton-line:last-child {
+    width: 60%;
+    margin-bottom: 0;
+}
+
+/* Smart Suggestions */
+.smart-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0;
+    margin-bottom: 4px;
+}
+
+.smart-suggestion {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    font-size: 12px;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.smart-suggestion:hover {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+.smart-suggestion svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* Formula explanation badge */
+.formula-explain {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--primary);
+    cursor: pointer;
+    margin-top: 6px;
+}
+
+.formula-explain:hover {
+    background: var(--primary);
+    color: #fff;
+}
+
+.formula-explain svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* Tooltip for formulas */
+.formula-tooltip {
+    position: absolute;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    max-width: 280px;
+    z-index: 50;
+    font-size: 12px;
+}
+
+.formula-tooltip h4 {
+    font-size: 13px;
+    margin-bottom: 8px;
+    color: var(--text);
+}
+
+.formula-tooltip p {
+    color: var(--text-2);
+    line-height: 1.5;
+}
+
+.formula-tooltip code {
+    background: var(--bg-alt);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: ui-monospace, monospace;
+}
