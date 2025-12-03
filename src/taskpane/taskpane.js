@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "1.6.0";
+const VERSION = "1.6.1";
 
 import {
     detectTaskType,
@@ -1653,20 +1653,27 @@ function applySort(range, data) {
                 const [key, value] = part.split(":").map(s => s.trim());
                 if (key === "column") opts.column = parseInt(value) || 0;
                 if (key === "ascending") opts.ascending = value !== "false";
+                if (key === "hasHeaders") opts.hasHeaders = value === "true";
             }
         }
     } else {
         opts = data || {};
     }
     
-    // Default to first column, ascending
+    // Default to first column, ascending, with headers
     const columnIndex = opts.column || 0;
     const ascending = opts.ascending !== false;
+    const hasHeaders = opts.hasHeaders !== false; // Default to true (has headers)
     
-    range.sort.apply([{ 
-        key: columnIndex, 
-        ascending: ascending 
-    }]);
+    range.sort.apply(
+        [{ 
+            key: columnIndex, 
+            ascending: ascending 
+        }],
+        false, // matchCase
+        hasHeaders, // hasHeaders - true means first row is header and won't be sorted
+        Excel.SortOrientation.rows
+    );
 }
 
 export { handleSend, handleApply, readExcelData, clearChat };
