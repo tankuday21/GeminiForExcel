@@ -22,6 +22,12 @@ const state = {
         selections: [],      // boolean[] - selection state for each action
         expandedIndex: -1,   // number - index of expanded action (-1 if none)
         highlightedIndex: -1 // number - index of highlighted action (-1 if none)
+    },
+    // History state for undo functionality
+    history: {
+        entries: [],         // HistoryEntry[] - all history entries, newest first
+        panelVisible: false, // boolean - whether history panel is shown
+        maxEntries: 20       // number - maximum entries to retain
     }
 };
 
@@ -86,6 +92,10 @@ function bindEvents() {
     });
     
     document.getElementById("clearBtn")?.addEventListener("click", clearChat);
+    
+    // History and Undo buttons
+    document.getElementById("historyBtn")?.addEventListener("click", toggleHistoryPanel);
+    document.getElementById("undoBtn")?.addEventListener("click", performUndo);
     
     document.querySelectorAll("[data-prompt]").forEach(el => {
         el.addEventListener("click", () => {
@@ -802,6 +812,196 @@ async function clearHighlight() {
 }
 
 // ============================================================================
+// History and Undo Functions
+// ============================================================================
+
+/**
+ * Generates a unique ID for history entries
+ */
+function generateHistoryId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
+/**
+ * Captures the current state of a range for undo
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {string} rangeAddress - The range to capture
+ * @returns {Promise<Object>} The captured undo data
+ */
+async function captureUndoData(ctx, sheet, rangeAddress) {
+    try {
+        const range = sheet.getRange(rangeAddress);
+        range.load(["values", "formulas", "address"]);
+        await ctx.sync();
+        
+        return {
+            values: range.values,
+            formulas: range.formulas,
+            address: range.address
+        };
+    } catch (e) {
+        console.warn("Could not capture undo data:", e);
+        return null;
+    }
+}
+
+/**
+ * Adds an action to history
+ */
+function addActionToHistory(action, undoData) {
+    const entry = {
+        id: generateHistoryId(),
+        type: action.type,
+        target: action.target,
+        timestamp: Date.now(),
+        undoData: undoData
+    };
+    
+    // Prepend to history
+    state.history.entries = [entry, ...state.history.entries];
+    
+    // Enforce max limit
+    if (state.history.entries.length > state.history.maxEntries) {
+        state.history.entries = state.history.entries.slice(0, state.history.maxEntries);
+    }
+    
+    updateUndoButtonState();
+    if (state.history.panelVisible) {
+        renderHistoryPanel();
+    }
+}
+
+/**
+ * Performs undo of the most recent action
+ */
+async function performUndo() {
+    if (!state.history.entries.length) {
+        toast("Nothing to undo");
+        return;
+    }
+    
+    const entry = state.history.entries[0];
+    
+    try {
+        await Excel.run(async (ctx) => {
+            const sheet = ctx.workbook.worksheets.getActiveWorksheet();
+            const range = sheet.getRange(entry.undoData.address);
+            
+            // Restore formulas (which also restores values for non-formula cells)
+            range.formulas = entry.undoData.formulas;
+            await ctx.sync();
+        });
+        
+        // Remove from history
+        state.history.entries = state.history.entries.slice(1);
+        
+        updateUndoButtonState();
+        if (state.history.panelVisible) {
+            renderHistoryPanel();
+        }
+        
+        toast("Undone");
+        await readExcelData();
+    } catch (e) {
+        console.error("Undo failed:", e);
+        toast("Undo failed");
+        // Keep entry in history on failure
+    }
+}
+
+/**
+ * Updates the Undo button state
+ */
+function updateUndoButtonState() {
+    const undoBtn = document.getElementById("undoBtn");
+    if (undoBtn) {
+        undoBtn.disabled = state.history.entries.length === 0;
+    }
+}
+
+/**
+ * Formats a timestamp as relative time
+ */
+function formatRelativeTime(timestamp) {
+    const now = Date.now();
+    const diff = now - timestamp;
+    
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (seconds < 60) return 'just now';
+    if (minutes < 60) return `${minutes} min ago`;
+    if (hours < 24) return `${hours} hr ago`;
+    if (days === 1) return 'yesterday';
+    return `${days} days ago`;
+}
+
+/**
+ * Renders the history panel
+ */
+function renderHistoryPanel() {
+    const list = document.getElementById("historyList");
+    if (!list) return;
+    
+    if (!state.history.entries.length) {
+        list.innerHTML = '<div class="history-empty">No actions yet</div>';
+        return;
+    }
+    
+    const typeLabels = {
+        formula: "Formula",
+        values: "Values",
+        format: "Format",
+        chart: "Chart",
+        validation: "Dropdown",
+        sort: "Sort",
+        autofill: "Autofill"
+    };
+    
+    const html = state.history.entries.map(entry => {
+        const icon = getActionIcon(entry.type);
+        const label = typeLabels[entry.type] || entry.type;
+        const timeStr = formatRelativeTime(entry.timestamp);
+        
+        return `
+            <div class="history-entry" data-id="${entry.id}">
+                <div class="history-icon ${entry.type}">${icon}</div>
+                <div class="history-content">
+                    <span class="history-label">${label}</span>
+                    <span class="history-target">${entry.target}</span>
+                </div>
+                <span class="history-time">${timeStr}</span>
+            </div>
+        `;
+    }).join('');
+    
+    list.innerHTML = html;
+}
+
+/**
+ * Toggles history panel visibility
+ */
+function toggleHistoryPanel() {
+    state.history.panelVisible = !state.history.panelVisible;
+    const panel = document.getElementById("historyPanel");
+    const btn = document.getElementById("historyBtn");
+    
+    if (panel) {
+        panel.style.display = state.history.panelVisible ? "block" : "none";
+        if (state.history.panelVisible) {
+            renderHistoryPanel();
+        }
+    }
+    
+    if (btn) {
+        btn.classList.toggle("active", state.history.panelVisible);
+    }
+}
+
+// ============================================================================
 // Apply Actions
 // ============================================================================
 async function handleApply() {
@@ -826,9 +1026,20 @@ async function handleApply() {
             
             for (const action of selectedActions) {
                 try {
+                    // Capture undo data before applying (skip for charts - can't undo)
+                    let undoData = null;
+                    if (action.type !== 'chart') {
+                        undoData = await captureUndoData(ctx, sheet, action.target);
+                    }
+                    
                     await executeAction(ctx, sheet, action);
                     await ctx.sync();
                     successCount++;
+                    
+                    // Add to history if we have undo data
+                    if (undoData) {
+                        addActionToHistory(action, undoData);
+                    }
                 } catch (e) {
                     errorMsg = e.message;
                     console.error("Action failed:", e);

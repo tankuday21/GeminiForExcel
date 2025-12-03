@@ -772,3 +772,158 @@ body {
     color: var(--error);
     margin-left: 4px;
 }
+
+
+/* History Panel */
+.history-panel {
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    margin: 0 16px 16px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+}
+
+.history-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.history-list {
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.history-entry {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.history-entry:last-child {
+    border-bottom: none;
+}
+
+.history-icon {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.history-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.history-icon.formula { color: #7c3aed; }
+.history-icon.values { color: #059669; }
+.history-icon.format { color: #d97706; }
+.history-icon.chart { color: #2563eb; }
+.history-icon.validation { color: #dc2626; }
+
+.history-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.history-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.history-target {
+    font-size: 11px;
+    color: var(--text-3);
+    font-family: ui-monospace, monospace;
+    background: var(--bg-alt);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+.history-time {
+    font-size: 11px;
+    color: var(--text-3);
+    flex-shrink: 0;
+}
+
+.history-empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-3);
+    font-size: 13px;
+}
+
+/* Action Buttons Row */
+.action-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.undo-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: 0.15s;
+}
+
+.undo-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--text-3);
+}
+
+.undo-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.undo-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.action-buttons .apply-btn {
+    flex: 1;
+    margin-top: 0;
+}
+
+/* History button active state */
+.icon-btn.active {
+    background: var(--primary);
+    color: #fff;
+}
+
+.icon-btn.active:hover {
+    background: var(--primary-hover);
+    color: #fff;
+}

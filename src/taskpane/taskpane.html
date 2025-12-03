@@ -17,6 +17,11 @@
                 <span>Copilot</span>
             </div>
             <div class="header-actions">
+                <button class="icon-btn" id="historyBtn" title="History">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                    </svg>
+                </button>
                 <button class="icon-btn" id="clearBtn" title="Clear">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -71,6 +76,13 @@
                 </div>
                 <div id="previewList" class="preview-list"></div>
             </div>
+            
+            <div id="historyPanel" class="history-panel" style="display: none;">
+                <div class="history-header">
+                    <span class="history-title">Action History</span>
+                </div>
+                <div id="historyList" class="history-list"></div>
+            </div>
         </main>
 
         <div class="context-bar">
@@ -92,7 +104,13 @@
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                 </button>
             </div>
-            <button class="apply-btn" id="applyBtn" disabled>Apply Changes</button>
+            <div class="action-buttons">
+                <button class="undo-btn" id="undoBtn" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h10a5 5 0 015 5v2M3 10l6 6M3 10l6-6"/></svg>
+                    Undo
+                </button>
+                <button class="apply-btn" id="applyBtn" disabled>Apply Changes</button>
+            </div>
         </div>
     </div>
 
