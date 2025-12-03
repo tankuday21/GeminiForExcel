@@ -1,122 +1,145 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excel AI Copilot</title>
-    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <link rel="stylesheet" href="https://res-1.cdn.office.net/files/fabric-cdn-prod_20230815.002/office-ui-fabric-core/11.1.0/css/fabric.min.css"/>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="taskpane.css" rel="stylesheet" type="text/css" />
 </head>
-<body class="ms-font-m ms-Fabric">
-    <div id="app" class="app-container">
+<body>
+    <div class="app">
         <!-- Header -->
         <header class="header">
-            <div class="header-icon">✨</div>
-            <div class="header-text">
-                <h1>Excel AI Copilot</h1>
-                <p>Your intelligent Excel assistant</p>
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <i class="fas fa-sparkles"></i>
+                    </div>
+                    <div class="logo-text">
+                        <span class="logo-title">Copilot</span>
+                        <span class="logo-subtitle">for Excel</span>
+                    </div>
+                </div>
+                <button class="header-btn" id="settingsBtn" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
             </div>
         </header>
 
-        <!-- Quick Actions -->
-        <section class="quick-actions">
-            <h3>Quick Actions</h3>
-            <div class="action-grid">
-                <button class="action-btn" data-action="analyze">
-                    <span class="action-icon">📊</span>
-                    <span>Analyze Data</span>
-                </button>
-                <button class="action-btn" data-action="formula">
-                    <span class="action-icon">🔢</span>
-                    <span>Create Formula</span>
-                </button>
-                <button class="action-btn" data-action="chart">
-                    <span class="action-icon">📈</span>
-                    <span>Create Chart</span>
-                </button>
-                <button class="action-btn" data-action="format">
-                    <span class="action-icon">🎨</span>
-                    <span>Format Data</span>
-                </button>
-                <button class="action-btn" data-action="clean">
-                    <span class="action-icon">🧹</span>
-                    <span>Clean Data</span>
-                </button>
-                <button class="action-btn" data-action="summarize">
-                    <span class="action-icon">📝</span>
-                    <span>Summarize</span>
-                </button>
-            </div>
-        </section>
-
-        <!-- Context Panel -->
-        <section class="context-panel">
-            <div class="context-header">
-                <label class="toggle-label">
-                    <input type="checkbox" id="useSelection" checked />
-                    <span class="toggle-slider"></span>
-                    <span>Use selected range</span>
-                </label>
-                <button id="btnRefresh" class="icon-btn" title="Refresh selection">🔄</button>
-            </div>
-            <div id="selectionInfo" class="selection-info">
-                <span class="info-label">No selection</span>
-            </div>
-        </section>
-
-        <!-- Chat Area -->
-        <section class="chat-section">
-            <div id="chatContainer" class="chat-container">
-                <div class="welcome-message">
-                    <p>👋 Hi! I'm your Excel AI assistant. I can help you:</p>
-                    <ul>
-                        <li>Analyze and understand your data</li>
-                        <li>Create formulas and functions</li>
-                        <li>Generate charts and visualizations</li>
-                        <li>Clean and format data</li>
-                        <li>Answer questions about your spreadsheet</li>
-                    </ul>
-                    <p>Select some data and ask me anything!</p>
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Welcome Screen (shown initially) -->
+            <div id="welcomeScreen" class="welcome-screen">
+                <div class="welcome-icon">
+                    <i class="fas fa-wand-magic-sparkles"></i>
+                </div>
+                <h2>Hi! I'm your Excel AI assistant</h2>
+                <p>I can help you analyze data, create formulas, build charts, and much more.</p>
+                
+                <div class="suggestions">
+                    <p class="suggestions-label">Try asking:</p>
+                    <button class="suggestion-chip" data-prompt="Analyze this data and find key insights">
+                        <i class="fas fa-chart-line"></i>
+                        Analyze my data
+                    </button>
+                    <button class="suggestion-chip" data-prompt="Create a formula to sum this column">
+                        <i class="fas fa-function"></i>
+                        Create a formula
+                    </button>
+                    <button class="suggestion-chip" data-prompt="What chart would best visualize this data?">
+                        <i class="fas fa-chart-pie"></i>
+                        Suggest a chart
+                    </button>
+                    <button class="suggestion-chip" data-prompt="Clean this data and remove duplicates">
+                        <i class="fas fa-broom"></i>
+                        Clean my data
+                    </button>
                 </div>
             </div>
-        </section>
+
+            <!-- Chat Container -->
+            <div id="chatContainer" class="chat-container"></div>
+        </main>
+
+        <!-- Context Bar -->
+        <div class="context-bar" id="contextBar">
+            <div class="context-toggle">
+                <label class="switch">
+                    <input type="checkbox" id="useSelection" checked>
+                    <span class="slider"></span>
+                </label>
+                <span class="context-label">Use selection</span>
+            </div>
+            <div class="context-info" id="contextInfo">
+                <i class="fas fa-table"></i>
+                <span id="selectionText">No selection</span>
+            </div>
+            <button class="context-refresh" id="refreshBtn" title="Refresh">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+        </div>
 
         <!-- Input Area -->
-        <section class="input-section">
-            <div class="input-wrapper">
+        <div class="input-area">
+            <div class="input-container">
                 <textarea 
                     id="promptInput" 
                     placeholder="Ask me anything about your Excel data..."
-                    rows="2"
+                    rows="1"
                 ></textarea>
-                <button id="btnSend" class="send-btn" title="Send">
-                    <span>➤</span>
+                <button class="send-btn" id="sendBtn" disabled>
+                    <i class="fas fa-paper-plane"></i>
                 </button>
             </div>
-            <div class="input-actions">
-                <button id="btnApply" class="apply-btn" disabled>
-                    ✓ Apply Changes to Sheet
-                </button>
-            </div>
-        </section>
-
-        <!-- Status Bar -->
-        <div id="statusBar" class="status-bar"></div>
+            <button class="apply-btn" id="applyBtn" disabled>
+                <i class="fas fa-check"></i>
+                Apply to Sheet
+            </button>
+        </div>
     </div>
 
     <!-- Settings Modal -->
-    <div id="settingsModal" class="modal hidden">
-        <div class="modal-content">
-            <h3>API Settings</h3>
-            <label>Gemini API Key:</label>
-            <input type="password" id="apiKeyInput" placeholder="Enter your API key" />
-            <div class="modal-actions">
-                <button id="btnSaveSettings">Save</button>
-                <button id="btnCloseSettings">Cancel</button>
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-cog"></i> Settings</h3>
+                <button class="modal-close" id="closeSettings">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="apiKeyInput">
+                        <i class="fas fa-key"></i> Gemini API Key
+                    </label>
+                    <div class="input-with-icon">
+                        <input type="password" id="apiKeyInput" placeholder="Enter your API key">
+                        <button class="toggle-password" id="togglePassword">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <p class="form-hint">
+                        Get your free API key from 
+                        <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelSettings">Cancel</button>
+                <button class="btn btn-primary" id="saveSettings">
+                    <i class="fas fa-save"></i> Save
+                </button>
             </div>
         </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <i class="fas fa-check-circle"></i>
+        <span id="toastMessage">Settings saved!</span>
     </div>
 </body>
 </html>
