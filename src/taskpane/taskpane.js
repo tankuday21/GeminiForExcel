@@ -5,6 +5,9 @@
 
 /* global document, Excel, Office, fetch, localStorage */
 
+// Version number - increment with each update
+const VERSION = "1.5.0";
+
 import {
     detectTaskType,
     TASK_TYPES,
@@ -24,7 +27,8 @@ const CONFIG = {
     THEME_KEY: "excel_copilot_theme",
     MAX_HISTORY: 10,
     MAX_RETRIES: 3,
-    RETRY_DELAY: 1000
+    RETRY_DELAY: 1000,
+    VERSION: VERSION
 };
 
 const state = {
