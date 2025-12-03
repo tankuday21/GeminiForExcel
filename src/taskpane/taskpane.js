@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "1.7.0";
+const VERSION = "1.7.1";
 
 import {
     detectTaskType,
@@ -1478,12 +1478,18 @@ async function applyCopy(ctx, sheet, source, target) {
     }
     
     const sourceRange = sheet.getRange(source);
-    sourceRange.load(["values", "formulas"]);
+    sourceRange.load(["values", "formulas", "rowCount", "columnCount"]);
     await ctx.sync();
     
-    const targetRange = sheet.getRange(target);
+    // Get source dimensions
+    const rowCount = sourceRange.rowCount;
+    const colCount = sourceRange.columnCount;
     
-    // Copy values (use formulas to preserve formulas if any)
+    // If target is a single cell, resize it to match source dimensions
+    const targetCell = sheet.getRange(target);
+    const targetRange = targetCell.getResizedRange(rowCount - 1, colCount - 1);
+    
+    // Copy formulas (preserves both formulas and values)
     targetRange.formulas = sourceRange.formulas;
 }
 
