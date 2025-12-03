@@ -560,7 +560,7 @@ async function executeAction(ctx, sheet, action) {
             break;
             
         case "validation":
-            await applyValidation(ctx, range, source);
+            await applyValidation(ctx, sheet, range, source);
             break;
             
         case "chart":
@@ -641,17 +641,28 @@ function applyFormat(range, data) {
     }
 }
 
-async function applyValidation(ctx, range, source) {
+async function applyValidation(ctx, sheet, range, source) {
     if (source) {
         // Clear any existing validation first
         range.dataValidation.clear();
         await ctx.sync();
         
+        // Get sheet name for proper reference
+        sheet.load("name");
+        await ctx.sync();
+        
+        const sheetName = sheet.name;
+        // Handle sheet names with spaces
+        const safeSheetName = sheetName.includes(" ") ? `'${sheetName}'` : sheetName;
+        
+        // Build the full reference with sheet name
+        const fullSource = `=${safeSheetName}!${source}`;
+        
         // Set the validation rule
         range.dataValidation.rule = {
             list: {
                 inCellDropDown: true,
-                source: "=" + source
+                source: fullSource
             }
         };
     }
