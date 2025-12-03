@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excel AI Copilot</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="taskpane.css" rel="stylesheet" type="text/css" />
 </head>
@@ -13,17 +12,17 @@
     <div class="app">
         <!-- Header -->
         <header class="header">
-            <div class="header-content">
-                <div class="logo">
-                    <div class="logo-icon">
-                        <i class="fas fa-sparkles"></i>
-                    </div>
-                    <div class="logo-text">
-                        <span class="logo-title">Copilot</span>
-                        <span class="logo-subtitle">for Excel</span>
-                    </div>
+            <div class="header-left">
+                <div class="logo-icon">
+                    <i class="fas fa-bolt"></i>
                 </div>
-                <button class="header-btn" id="settingsBtn" title="Settings">
+                <span class="logo-text">Copilot</span>
+            </div>
+            <div class="header-actions">
+                <button class="icon-btn" id="clearChat" title="Clear conversation">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+                <button class="icon-btn" id="settingsBtn" title="Settings">
                     <i class="fas fa-cog"></i>
                 </button>
             </div>
@@ -31,31 +30,30 @@
 
         <!-- Main Content -->
         <main class="main">
-            <!-- Welcome Screen (shown initially) -->
+            <!-- Welcome Screen -->
             <div id="welcomeScreen" class="welcome-screen">
                 <div class="welcome-icon">
-                    <i class="fas fa-wand-magic-sparkles"></i>
+                    <i class="fas fa-bolt"></i>
                 </div>
-                <h2>Hi! I'm your Excel AI assistant</h2>
-                <p>I can help you analyze data, create formulas, build charts, and much more.</p>
+                <h2>Excel AI Copilot</h2>
+                <p>Select data and ask me to analyze, create formulas, or automate tasks.</p>
                 
                 <div class="suggestions">
-                    <p class="suggestions-label">Try asking:</p>
-                    <button class="suggestion-chip" data-prompt="Analyze this data and find key insights">
+                    <button class="suggestion-chip" data-prompt="Analyze this data and summarize key insights">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Analyze data</span>
+                    </button>
+                    <button class="suggestion-chip" data-prompt="Create a formula for this calculation">
+                        <i class="fas fa-calculator"></i>
+                        <span>Create formula</span>
+                    </button>
+                    <button class="suggestion-chip" data-prompt="What chart type would best visualize this data?">
                         <i class="fas fa-chart-line"></i>
-                        Analyze my data
+                        <span>Suggest chart</span>
                     </button>
-                    <button class="suggestion-chip" data-prompt="Create a formula to sum this column">
-                        <i class="fas fa-function"></i>
-                        Create a formula
-                    </button>
-                    <button class="suggestion-chip" data-prompt="What chart would best visualize this data?">
-                        <i class="fas fa-chart-pie"></i>
-                        Suggest a chart
-                    </button>
-                    <button class="suggestion-chip" data-prompt="Clean this data and remove duplicates">
-                        <i class="fas fa-broom"></i>
-                        Clean my data
+                    <button class="suggestion-chip" data-prompt="Format this data professionally">
+                        <i class="fas fa-palette"></i>
+                        <span>Format data</span>
                     </button>
                 </div>
             </div>
@@ -65,38 +63,38 @@
         </main>
 
         <!-- Context Bar -->
-        <div class="context-bar" id="contextBar">
-            <div class="context-toggle">
-                <label class="switch">
+        <div class="context-bar">
+            <div class="context-left">
+                <label class="toggle">
                     <input type="checkbox" id="useSelection" checked>
-                    <span class="slider"></span>
+                    <span class="toggle-track"></span>
                 </label>
-                <span class="context-label">Use selection</span>
+                <span class="context-label">Context</span>
             </div>
             <div class="context-info" id="contextInfo">
                 <i class="fas fa-table"></i>
                 <span id="selectionText">No selection</span>
             </div>
-            <button class="context-refresh" id="refreshBtn" title="Refresh">
+            <button class="icon-btn-sm" id="refreshBtn" title="Refresh">
                 <i class="fas fa-sync-alt"></i>
             </button>
         </div>
 
         <!-- Input Area -->
         <div class="input-area">
-            <div class="input-container">
+            <div class="input-box">
                 <textarea 
                     id="promptInput" 
-                    placeholder="Ask me anything about your Excel data..."
+                    placeholder="Ask anything..."
                     rows="1"
                 ></textarea>
-                <button class="send-btn" id="sendBtn" disabled>
-                    <i class="fas fa-paper-plane"></i>
+                <button class="send-btn" id="sendBtn" disabled title="Send">
+                    <i class="fas fa-arrow-up"></i>
                 </button>
             </div>
             <button class="apply-btn" id="applyBtn" disabled>
                 <i class="fas fa-check"></i>
-                Apply to Sheet
+                <span>Apply to Sheet</span>
             </button>
         </div>
     </div>
@@ -105,41 +103,36 @@
     <div class="modal-overlay" id="settingsModal">
         <div class="modal">
             <div class="modal-header">
-                <h3><i class="fas fa-cog"></i> Settings</h3>
-                <button class="modal-close" id="closeSettings">
+                <h3>Settings</h3>
+                <button class="icon-btn" id="closeSettings">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label for="apiKeyInput">
-                        <i class="fas fa-key"></i> Gemini API Key
-                    </label>
-                    <div class="input-with-icon">
-                        <input type="password" id="apiKeyInput" placeholder="Enter your API key">
-                        <button class="toggle-password" id="togglePassword">
+                    <label>API Key</label>
+                    <div class="input-group">
+                        <input type="password" id="apiKeyInput" placeholder="Enter Gemini API key">
+                        <button class="icon-btn" id="togglePassword">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
-                    <p class="form-hint">
-                        Get your free API key from 
-                        <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>
+                    <p class="hint">
+                        <a href="https://aistudio.google.com/apikey" target="_blank">Get free API key</a>
                     </p>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="cancelSettings">Cancel</button>
-                <button class="btn btn-primary" id="saveSettings">
-                    <i class="fas fa-save"></i> Save
-                </button>
+                <button class="btn-secondary" id="cancelSettings">Cancel</button>
+                <button class="btn-primary" id="saveSettings">Save</button>
             </div>
         </div>
     </div>
 
-    <!-- Toast Notification -->
+    <!-- Toast -->
     <div class="toast" id="toast">
         <i class="fas fa-check-circle"></i>
-        <span id="toastMessage">Settings saved!</span>
+        <span id="toastMessage">Saved</span>
     </div>
 </body>
 </html>
