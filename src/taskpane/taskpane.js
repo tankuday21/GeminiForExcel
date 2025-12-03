@@ -16,7 +16,13 @@ const state = {
     pendingActions: [],
     currentData: null,
     conversationHistory: [],
-    isFirstMessage: true
+    isFirstMessage: true,
+    // Preview state
+    preview: {
+        selections: [],      // boolean[] - selection state for each action
+        expandedIndex: -1,   // number - index of expanded action (-1 if none)
+        highlightedIndex: -1 // number - index of highlighted action (-1 if none)
+    }
 };
 
 // ============================================================================
@@ -235,10 +241,13 @@ function clearChat() {
     state.conversationHistory = [];
     state.pendingActions = [];
     state.isFirstMessage = true;
+    state.preview.selections = [];
+    state.preview.expandedIndex = -1;
     document.getElementById("chat").innerHTML = "";
     document.getElementById("chat").style.display = "none";
     document.getElementById("welcome").style.display = "flex";
     document.getElementById("applyBtn").disabled = true;
+    hidePreviewPanel();
     toast("Cleared");
 }
 
@@ -283,7 +292,12 @@ async function handleSend() {
         addMessage("ai", message, actions.length ? "has-action" : "");
         
         if (actions.length) {
-            document.getElementById("applyBtn").disabled = false;
+            // Initialize preview state and show preview panel
+            state.preview.selections = actions.map(() => true);
+            state.preview.expandedIndex = -1;
+            showPreviewPanel();
+        } else {
+            hidePreviewPanel();
         }
         
         state.conversationHistory.push(
@@ -522,10 +536,279 @@ function parseResponse(text) {
 }
 
 // ============================================================================
+// Preview Panel Functions
+// ============================================================================
+
+/**
+ * Gets the SVG icon for an action type
+ * @param {string} type - Action type
+ * @returns {string} SVG icon markup
+ */
+function getActionIcon(type) {
+    const icons = {
+        formula: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/><text x="18" y="18" font-size="8" fill="currentColor">fx</text></svg>',
+        values: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>',
+        format: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16M6 16l6-12 6 12M8 12h8"/></svg>',
+        chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>',
+        validation: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>',
+        sort: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h12M3 18h6"/></svg>',
+        autofill: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'
+    };
+    return icons[type] || icons.formula;
+}
+
+/**
+ * Gets a summary string for an action
+ * @param {Object} action - The action to summarize
+ * @returns {string} Human-readable summary
+ */
+function getActionSummary(action) {
+    const typeLabels = {
+        formula: "Formula",
+        values: "Values",
+        format: "Format",
+        chart: "Chart",
+        validation: "Dropdown",
+        sort: "Sort",
+        autofill: "Autofill"
+    };
+    return typeLabels[action.type] || action.type;
+}
+
+/**
+ * Gets detailed description for an action
+ * @param {Object} action - The action to describe
+ * @returns {string} Detailed description
+ */
+function getActionDetails(action) {
+    switch (action.type) {
+        case "formula":
+            return action.data || "No formula";
+        case "values":
+            try {
+                const vals = JSON.parse(action.data);
+                return JSON.stringify(vals, null, 2);
+            } catch {
+                return action.data || "No values";
+            }
+        case "format":
+            try {
+                const fmt = JSON.parse(action.data);
+                const parts = [];
+                if (fmt.bold) parts.push("Bold");
+                if (fmt.italic) parts.push("Italic");
+                if (fmt.fill) parts.push(`Fill: ${fmt.fill}`);
+                if (fmt.fontColor) parts.push(`Color: ${fmt.fontColor}`);
+                if (fmt.fontSize) parts.push(`Size: ${fmt.fontSize}`);
+                if (fmt.numberFormat) parts.push(`Format: ${fmt.numberFormat}`);
+                return parts.join(", ") || "No formatting";
+            } catch {
+                return action.data || "No format data";
+            }
+        case "chart":
+            return `Type: ${action.chartType}\nData: ${action.target}\nPosition: ${action.position}${action.title ? `\nTitle: ${action.title}` : ""}`;
+        case "validation":
+            return `Source: ${action.source}`;
+        case "sort":
+            return action.data || "Default sort";
+        case "autofill":
+            return `Source: ${action.source}`;
+        default:
+            return action.data || "No details";
+    }
+}
+
+/**
+ * Filters actions based on selection state
+ * @param {Object[]} actions - All pending actions
+ * @param {boolean[]} selections - Selection state for each action
+ * @returns {Object[]} Only the selected actions
+ */
+function filterSelectedActions(actions, selections) {
+    if (!actions || !selections) return [];
+    return actions.filter((_, index) => selections[index] === true);
+}
+
+/**
+ * Checks if any actions are selected
+ * @param {boolean[]} selections - Selection state array
+ * @returns {boolean} True if at least one action is selected
+ */
+function hasSelectedActions(selections) {
+    if (!selections || selections.length === 0) return false;
+    return selections.some(s => s === true);
+}
+
+/**
+ * Renders a single preview item HTML
+ */
+function renderPreviewItemHTML(action, index, isExpanded, isSelected, hasWarning) {
+    const icon = getActionIcon(action.type);
+    const summary = getActionSummary(action);
+    const details = getActionDetails(action);
+    const expandedClass = isExpanded ? 'expanded' : '';
+    const warningClass = hasWarning ? 'warning' : '';
+    
+    return `
+        <div class="preview-item ${expandedClass} ${warningClass}" data-index="${index}">
+            <input type="checkbox" class="preview-checkbox" ${isSelected ? 'checked' : ''} data-index="${index}">
+            <div class="preview-icon ${action.type}">${icon}</div>
+            <div class="preview-content">
+                <div class="preview-summary">
+                    ${summary}
+                    <span class="preview-target">${action.target}</span>
+                    ${hasWarning ? '<svg class="preview-warning" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>' : ''}
+                </div>
+                <div class="preview-details">${details}</div>
+            </div>
+            <div class="preview-expand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Shows the preview panel with pending actions
+ */
+function showPreviewPanel() {
+    const panel = document.getElementById("previewPanel");
+    const list = document.getElementById("previewList");
+    
+    if (!state.pendingActions.length) {
+        panel.style.display = "none";
+        return;
+    }
+    
+    // Initialize selections if needed (all selected by default)
+    if (state.preview.selections.length !== state.pendingActions.length) {
+        state.preview.selections = state.pendingActions.map(() => true);
+    }
+    
+    // Render preview items
+    const html = state.pendingActions.map((action, index) => {
+        const isExpanded = index === state.preview.expandedIndex;
+        const isSelected = state.preview.selections[index];
+        return renderPreviewItemHTML(action, index, isExpanded, isSelected, false);
+    }).join('');
+    
+    list.innerHTML = html;
+    panel.style.display = "block";
+    
+    // Bind events
+    bindPreviewEvents();
+    updateApplyButtonState();
+}
+
+/**
+ * Hides the preview panel
+ */
+function hidePreviewPanel() {
+    const panel = document.getElementById("previewPanel");
+    panel.style.display = "none";
+    state.preview.selections = [];
+    state.preview.expandedIndex = -1;
+}
+
+/**
+ * Binds event handlers to preview panel elements
+ */
+function bindPreviewEvents() {
+    // Checkbox changes
+    document.querySelectorAll(".preview-checkbox").forEach(cb => {
+        cb.addEventListener("change", (e) => {
+            const index = parseInt(e.target.dataset.index);
+            state.preview.selections[index] = e.target.checked;
+            updateApplyButtonState();
+        });
+        // Stop propagation to prevent expand/collapse when clicking checkbox
+        cb.addEventListener("click", (e) => e.stopPropagation());
+    });
+    
+    // Expand/collapse on item click
+    document.querySelectorAll(".preview-item").forEach(item => {
+        item.addEventListener("click", (e) => {
+            if (e.target.classList.contains("preview-checkbox")) return;
+            const index = parseInt(item.dataset.index);
+            toggleExpand(index);
+        });
+        
+        // Hover highlighting
+        item.addEventListener("mouseenter", () => {
+            const index = parseInt(item.dataset.index);
+            highlightRange(state.pendingActions[index]?.target);
+        });
+        
+        item.addEventListener("mouseleave", () => {
+            clearHighlight();
+        });
+    });
+    
+    // Select all button
+    document.getElementById("selectAllBtn")?.addEventListener("click", toggleSelectAll);
+}
+
+/**
+ * Toggles expand/collapse for a preview item
+ */
+function toggleExpand(index) {
+    state.preview.expandedIndex = state.preview.expandedIndex === index ? -1 : index;
+    showPreviewPanel(); // Re-render
+}
+
+/**
+ * Toggles select all / deselect all
+ */
+function toggleSelectAll() {
+    const allSelected = state.preview.selections.every(s => s);
+    state.preview.selections = state.preview.selections.map(() => !allSelected);
+    showPreviewPanel(); // Re-render
+}
+
+/**
+ * Updates the Apply button state based on selections
+ */
+function updateApplyButtonState() {
+    const applyBtn = document.getElementById("applyBtn");
+    const hasSelected = hasSelectedActions(state.preview.selections);
+    applyBtn.disabled = !hasSelected;
+}
+
+/**
+ * Highlights a range in Excel
+ */
+async function highlightRange(rangeAddress) {
+    if (!rangeAddress) return;
+    
+    try {
+        await Excel.run(async (ctx) => {
+            const sheet = ctx.workbook.worksheets.getActiveWorksheet();
+            const range = sheet.getRange(rangeAddress);
+            range.select();
+            await ctx.sync();
+        });
+    } catch (e) {
+        // Silently fail - range might be invalid
+        console.warn("Could not highlight range:", rangeAddress, e);
+    }
+}
+
+/**
+ * Clears any active highlighting (no-op for now, selection persists)
+ */
+async function clearHighlight() {
+    // Excel doesn't have a "clear selection" API
+    // The selection will change when user interacts with Excel
+}
+
+// ============================================================================
 // Apply Actions
 // ============================================================================
 async function handleApply() {
-    if (!state.pendingActions.length) {
+    // Get only selected actions
+    const selectedActions = filterSelectedActions(state.pendingActions, state.preview.selections);
+    
+    if (!selectedActions.length) {
         toast("Nothing to apply");
         return;
     }
@@ -541,7 +824,7 @@ async function handleApply() {
         await Excel.run(async (ctx) => {
             const sheet = ctx.workbook.worksheets.getActiveWorksheet();
             
-            for (const action of state.pendingActions) {
+            for (const action of selectedActions) {
                 try {
                     await executeAction(ctx, sheet, action);
                     await ctx.sync();
@@ -553,16 +836,18 @@ async function handleApply() {
             }
         });
         
-        if (successCount === state.pendingActions.length) {
-            addMessage("ai", "All changes applied successfully.", "success");
+        if (successCount === selectedActions.length) {
+            addMessage("ai", `${successCount} change${successCount > 1 ? 's' : ''} applied successfully.`, "success");
             toast("Applied");
         } else if (successCount > 0) {
-            addMessage("ai", `${successCount}/${state.pendingActions.length} changes applied. Error: ${errorMsg}`, "error");
+            addMessage("ai", `${successCount}/${selectedActions.length} changes applied. Error: ${errorMsg}`, "error");
         } else {
             addMessage("ai", `Failed: ${errorMsg}`, "error");
         }
         
+        // Clear pending actions and hide preview
         state.pendingActions = [];
+        hidePreviewPanel();
         await readExcelData();
     } catch (err) {
         addMessage("ai", "Failed: " + err.message, "error");
