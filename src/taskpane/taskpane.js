@@ -453,15 +453,49 @@ That's it! Just one action. The source should be the actual data range (e.g., E2
 </ACTION>
 
 **Chart:**
-<ACTION type="chart" target="DATARANGE" chartType="column">
+<ACTION type="chart" target="DATARANGE" chartType="TYPE" title="TITLE" position="CELL">
 </ACTION>
+
+## CHART TYPES
+- **column** - Vertical bar chart (default, good for comparing categories)
+- **bar** - Horizontal bar chart (good for long category names)
+- **line** - Line chart (good for trends over time)
+- **pie** - Pie chart (good for showing parts of a whole, use with 1 data series)
+- **area** - Area chart (good for cumulative totals over time)
+- **scatter** - XY Scatter plot (good for correlation between 2 variables)
+- **doughnut** - Like pie but with hole in center
+- **radar** - Spider/radar chart (good for comparing multiple variables)
+
+## CHART EXAMPLES
+
+**Sales by Region (Column Chart):**
+<ACTION type="chart" target="A1:B10" chartType="column" title="Sales by Region" position="H2">
+</ACTION>
+
+**Trend Over Time (Line Chart):**
+<ACTION type="chart" target="A1:C20" chartType="line" title="Monthly Trend" position="H2">
+</ACTION>
+
+**Market Share (Pie Chart):**
+<ACTION type="chart" target="A1:B5" chartType="pie" title="Market Share" position="H2">
+</ACTION>
+
+**Comparison (Bar Chart):**
+<ACTION type="chart" target="A1:D10" chartType="bar" title="Product Comparison" position="H2">
+</ACTION>
+
+## CHART TIPS
+- Include headers in the data range (first row/column as labels)
+- For pie charts, use only 2 columns (labels + values)
+- Position is where the top-left of chart will be placed
+- Choose chart type based on what story the data tells
 
 ## IMPORTANT
 
 - ALWAYS check COLUMN STRUCTURE first
 - For dropdowns, source is the data column range (e.g., E2:E100)
 - Don't use UNIQUE formula for dropdowns - just use the source range directly
-- Excel will show unique values in the dropdown automatically from the source range`;
+- For charts, include the header row in the target range`;
 }
 
 function parseResponse(text) {
@@ -477,8 +511,10 @@ function parseResponse(text) {
         const target = attrs.match(/target="([^"]+)"/)?.[1] || "";
         const source = attrs.match(/source="([^"]+)"/)?.[1] || "";
         const chartType = attrs.match(/chartType="([^"]+)"/)?.[1] || "column";
+        const title = attrs.match(/title="([^"]+)"/)?.[1] || "";
+        const position = attrs.match(/position="([^"]+)"/)?.[1] || "H2";
         
-        actions.push({ type, target, source, chartType, data: content });
+        actions.push({ type, target, source, chartType, title, position, data: content });
     }
     
     const message = text.replace(/<ACTION[\s\S]*?<\/ACTION>/g, "").trim();
@@ -564,7 +600,7 @@ async function executeAction(ctx, sheet, action) {
             break;
             
         case "chart":
-            createChart(sheet, range, chartType);
+            createChart(sheet, range, action);
             break;
             
         case "sort":
@@ -676,19 +712,67 @@ async function applyValidation(ctx, sheet, range, source) {
     }
 }
 
-function createChart(sheet, dataRange, chartType) {
+function createChart(sheet, dataRange, action) {
+    const { chartType, data } = action;
+    const ct = (chartType || "column").toLowerCase();
+    
+    // Parse additional options from data if provided
+    let title = "Chart";
+    let position = "H2";
+    
+    // Try to extract title and position from action attributes or data
+    if (action.title) title = action.title;
+    if (action.position) position = action.position;
+    
+    // Determine chart type
     let type = Excel.ChartType.columnClustered;
-    const ct = (chartType || "").toLowerCase();
     
-    if (ct.includes("line")) type = Excel.ChartType.line;
-    else if (ct.includes("pie")) type = Excel.ChartType.pie;
-    else if (ct.includes("bar")) type = Excel.ChartType.barClustered;
-    else if (ct.includes("area")) type = Excel.ChartType.area;
-    else if (ct.includes("scatter")) type = Excel.ChartType.xyscatter;
+    if (ct.includes("line")) {
+        type = Excel.ChartType.line;
+    } else if (ct.includes("pie")) {
+        type = Excel.ChartType.pie;
+    } else if (ct.includes("doughnut") || ct.includes("donut")) {
+        type = Excel.ChartType.doughnut;
+    } else if (ct.includes("bar")) {
+        type = Excel.ChartType.barClustered;
+    } else if (ct.includes("area")) {
+        type = Excel.ChartType.area;
+    } else if (ct.includes("scatter") || ct.includes("xy")) {
+        type = Excel.ChartType.xyscatter;
+    } else if (ct.includes("radar") || ct.includes("spider")) {
+        type = Excel.ChartType.radar;
+    } else if (ct.includes("stacked")) {
+        if (ct.includes("bar")) {
+            type = Excel.ChartType.barStacked;
+        } else {
+            type = Excel.ChartType.columnStacked;
+        }
+    }
     
+    // Create the chart
     const chart = sheet.charts.add(type, dataRange, Excel.ChartSeriesBy.auto);
-    chart.setPosition("H2", "P17");
-    chart.title.text = "Chart";
+    
+    // Calculate end position (chart size roughly 8 cols x 15 rows)
+    const startCol = position.match(/[A-Z]+/)?.[0] || "H";
+    const startRow = parseInt(position.match(/\d+/)?.[0] || "2");
+    const endCol = String.fromCharCode(startCol.charCodeAt(0) + 8);
+    const endRow = startRow + 15;
+    const endPosition = `${endCol}${endRow}`;
+    
+    chart.setPosition(position, endPosition);
+    
+    // Set title
+    chart.title.text = title;
+    chart.title.visible = true;
+    
+    // Style the chart
+    chart.legend.visible = true;
+    chart.legend.position = Excel.ChartLegendPosition.bottom;
+    
+    // For pie charts, show data labels
+    if (ct.includes("pie") || ct.includes("doughnut")) {
+        chart.legend.position = Excel.ChartLegendPosition.right;
+    }
 }
 
 function applySort(range, data) {
