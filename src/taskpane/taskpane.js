@@ -51,7 +51,10 @@ function initApp() {
         document.documentElement.setAttribute('data-theme', savedTheme);
     }
     bindEvents();
-    readExcelData();
+    readExcelData().then(() => {
+        // Show smart suggestions after data is loaded
+        showSmartSuggestions();
+    });
 }
 
 function bindEvents() {
@@ -459,10 +462,13 @@ async function handleSend() {
     document.getElementById("sendBtn").disabled = true;
     
     showTyping();
+    showLoadingSkeleton();
+    hideSmartSuggestions();
     
     try {
         const response = await callAI(prompt);
         hideTyping();
+        hideLoadingSkeleton();
         
         const { message, actions } = parseResponse(response);
         state.pendingActions = actions;
@@ -488,6 +494,7 @@ async function handleSend() {
         }
     } catch (err) {
         hideTyping();
+        hideLoadingSkeleton();
         addMessage("ai", getErrorMessage(err), "error");
     }
 }
