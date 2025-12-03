@@ -647,22 +647,30 @@ async function applyValidation(ctx, sheet, range, source) {
         range.dataValidation.clear();
         await ctx.sync();
         
-        // Get sheet name for proper reference
-        sheet.load("name");
+        // Get the source range to extract unique values
+        const sourceRange = sheet.getRange(source);
+        sourceRange.load("values");
         await ctx.sync();
         
-        const sheetName = sheet.name;
-        // Handle sheet names with spaces
-        const safeSheetName = sheetName.includes(" ") ? `'${sheetName}'` : sheetName;
+        // Extract unique non-empty values
+        const uniqueValues = [];
+        const seen = new Set();
+        for (const row of sourceRange.values) {
+            const val = row[0];
+            if (val !== null && val !== undefined && val !== "" && !seen.has(val)) {
+                seen.add(val);
+                uniqueValues.push(String(val));
+            }
+        }
         
-        // Build the full reference with sheet name
-        const fullSource = `=${safeSheetName}!${source}`;
+        // Create comma-separated list for validation
+        const listSource = uniqueValues.join(",");
         
-        // Set the validation rule
+        // Set the validation rule with explicit list
         range.dataValidation.rule = {
             list: {
                 inCellDropDown: true,
-                source: fullSource
+                source: listSource
             }
         };
     }
