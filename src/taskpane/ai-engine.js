@@ -272,6 +272,7 @@ function getCommonRules() {
 - chart: <ACTION type="chart" target="RANGE" chartType="TYPE" title="TITLE" position="CELL"></ACTION>
 - validation: <ACTION type="validation" target="CELL" source="RANGE"></ACTION>
 - sort: <ACTION type="sort" target="DATARANGE">{"column":1,"ascending":true}</ACTION>
+- copy: <ACTION type="copy" target="DESTINATION" source="SOURCE"></ACTION>
 
 ## SORTING DATA
 To sort data, use the sort action type (NOT formulas like SORT()):
@@ -283,10 +284,13 @@ To sort data, use the sort action type (NOT formulas like SORT()):
 - column: 0-based index of the column to sort by (0=first column, 1=second, etc.)
 - ascending: true for A-Z/smallest first, false for Z-A/largest first
 
-Example: Sort by Name (column B, index 1) ascending:
-<ACTION type="sort" target="A1:L51">
-{"column":1,"ascending":true}
-</ACTION>`;
+## COPYING DATA
+To copy data from one range to another:
+<ACTION type="copy" target="A52" source="A1:L51">
+</ACTION>
+
+- source: The range to copy FROM
+- target: The starting cell to paste TO (top-left corner of destination)`;
 }
 
 // ============================================================================

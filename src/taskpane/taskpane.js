@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "1.6.1";
+const VERSION = "1.7.0";
 
 import {
     detectTaskType,
@@ -1460,9 +1460,31 @@ async function executeAction(ctx, sheet, action) {
             }
             break;
             
+        case "copy":
+            await applyCopy(ctx, sheet, source, target);
+            break;
+            
         default:
             if (data) range.values = [[data]];
     }
+}
+
+/**
+ * Copies data from source range to target range
+ */
+async function applyCopy(ctx, sheet, source, target) {
+    if (!source || !target) {
+        throw new Error("Copy requires both source and target ranges");
+    }
+    
+    const sourceRange = sheet.getRange(source);
+    sourceRange.load(["values", "formulas"]);
+    await ctx.sync();
+    
+    const targetRange = sheet.getRange(target);
+    
+    // Copy values (use formulas to preserve formulas if any)
+    targetRange.formulas = sourceRange.formulas;
 }
 
 async function applyFormula(range, formula) {
