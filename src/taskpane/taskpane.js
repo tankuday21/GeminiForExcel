@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.0.1";
+const VERSION = "2.0.2";
 
 import {
     detectTaskType,
@@ -510,7 +510,13 @@ async function handleSend() {
         return;
     }
     
+    // Always refresh data before sending to ensure latest data
     await readExcelData();
+    
+    // Clear conversation history in read-only mode to ensure fresh data context
+    if (state.mode === "readonly") {
+        state.conversationHistory = [];
+    }
     
     // Detect task type and show indicator
     const taskType = detectTaskType(prompt);
