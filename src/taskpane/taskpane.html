@@ -15,7 +15,7 @@
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
                 <span>Copilot</span>
-                <span class="version-badge" id="versionBadge">v1.8.0</span>
+                <span class="version-badge" id="versionBadge">v1.9.0</span>
             </div>
             <div class="header-actions">
                 <button class="icon-btn" id="themeBtn" title="Toggle Dark Mode">
@@ -92,11 +92,7 @@
         </main>
 
         <div class="context-bar">
-            <label class="toggle">
-                <input type="checkbox" id="useContext" checked>
-                <span class="toggle-slider"></span>
-            </label>
-            <span class="context-label">Context:</span>
+            <span class="context-label">Data:</span>
             <span class="context-info" id="contextInfo">No selection</span>
             <button class="icon-btn-sm" id="refreshBtn" title="Refresh">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
@@ -139,6 +135,21 @@
                     </button>
                 </div>
                 <p class="hint">Get your free key at <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a></p>
+                
+                <div class="settings-section">
+                    <label>Mode</label>
+                    <div class="mode-toggle">
+                        <label class="mode-label">
+                            <input type="radio" name="mode" value="edit" id="modeEdit" checked>
+                            <span>Edit Mode</span>
+                        </label>
+                        <label class="mode-label">
+                            <input type="radio" name="mode" value="readonly" id="modeReadOnly">
+                            <span>Read-Only Mode</span>
+                        </label>
+                    </div>
+                    <p class="hint">Edit mode allows applying changes. Read-only mode prevents modifications.</p>
+                </div>
                 
                 <div class="settings-section">
                     <label>AI Learning</label>

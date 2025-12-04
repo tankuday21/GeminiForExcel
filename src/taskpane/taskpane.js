@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "1.8.0";
+const VERSION = "1.9.0";
 
 import {
     detectTaskType,
@@ -39,6 +39,7 @@ const state = {
     isFirstMessage: true,
     lastAIResponse: "",      // Track last AI response for corrections
     currentTaskType: null,   // Track current task type
+    mode: "edit",            // "edit" or "readonly"
     // Preview state
     preview: {
         selections: [],      // boolean[] - selection state for each action
@@ -68,6 +69,11 @@ function initApp() {
     const savedTheme = localStorage.getItem(CONFIG.THEME_KEY);
     if (savedTheme) {
         document.documentElement.setAttribute('data-theme', savedTheme);
+    }
+    // Load saved mode preference
+    const savedMode = localStorage.getItem("excel_copilot_mode");
+    if (savedMode) {
+        state.mode = savedMode;
     }
     bindEvents();
     readExcelData().then(() => {
@@ -105,6 +111,8 @@ function bindEvents() {
     
     document.getElementById("settingsBtn")?.addEventListener("click", () => {
         document.getElementById("apiKeyInput").value = state.apiKey;
+        // Set mode radio button
+        document.getElementById(state.mode === "readonly" ? "modeReadOnly" : "modeEdit").checked = true;
         document.getElementById("modal").classList.add("open");
     });
     
@@ -113,6 +121,15 @@ function bindEvents() {
     document.getElementById("saveBtn")?.addEventListener("click", () => {
         state.apiKey = document.getElementById("apiKeyInput").value.trim();
         localStorage.setItem(CONFIG.STORAGE_KEY, state.apiKey);
+        
+        // Save mode preference
+        const selectedMode = document.querySelector('input[name="mode"]:checked')?.value || "edit";
+        state.mode = selectedMode;
+        localStorage.setItem("excel_copilot_mode", selectedMode);
+        
+        // Update apply button state
+        updateApplyButtonState();
+        
         closeModal();
         toast("Saved");
     });
@@ -997,7 +1014,15 @@ function toggleSelectAll() {
 function updateApplyButtonState() {
     const applyBtn = document.getElementById("applyBtn");
     const hasSelected = hasSelectedActions(state.preview.selections);
-    applyBtn.disabled = !hasSelected;
+    const isReadOnly = state.mode === "readonly";
+    applyBtn.disabled = !hasSelected || isReadOnly;
+    
+    // Update button text to indicate read-only mode
+    if (isReadOnly) {
+        applyBtn.textContent = "Read-Only Mode";
+    } else {
+        applyBtn.textContent = "Apply Changes";
+    }
 }
 
 /**
@@ -1355,6 +1380,12 @@ function toggleHistoryPanel() {
 // Apply Actions
 // ============================================================================
 async function handleApply() {
+    // Check if in read-only mode
+    if (state.mode === "readonly") {
+        toast("Read-only mode: Cannot apply changes");
+        return;
+    }
+    
     // Get only selected actions
     const selectedActions = filterSelectedActions(state.pendingActions, state.preview.selections);
     
