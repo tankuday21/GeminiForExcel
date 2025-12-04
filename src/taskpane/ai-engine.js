@@ -290,7 +290,19 @@ To copy data from one range to another:
 </ACTION>
 
 - source: The range to copy FROM
-- target: The starting cell to paste TO (top-left corner of destination)`;
+- target: The starting cell to paste TO (top-left corner of destination)
+
+## CREATING SHEETS
+To create a new sheet:
+<ACTION type="sheet" target="SheetName">
+</ACTION>
+
+- target: The name of the new sheet to create
+- data: (optional) JSON array of values to populate the sheet
+
+Example: Create a sheet named "Summary":
+<ACTION type="sheet" target="Summary">
+</ACTION>`;
 }
 
 // ============================================================================

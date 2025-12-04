@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "1.7.2";
+const VERSION = "1.8.0";
 
 import {
     detectTaskType,
@@ -1464,8 +1464,37 @@ async function executeAction(ctx, sheet, action) {
             await applyCopy(ctx, sheet, source, target);
             break;
             
+        case "sheet":
+            await createSheet(ctx, target, data);
+            break;
+            
         default:
             if (data) range.values = [[data]];
+    }
+}
+
+/**
+ * Creates a new sheet with optional name
+ */
+async function createSheet(ctx, sheetName, data) {
+    if (!sheetName) {
+        throw new Error("Sheet name is required");
+    }
+    
+    const sheets = ctx.workbook.worksheets;
+    const newSheet = sheets.add(sheetName);
+    
+    // If data is provided, populate it
+    if (data) {
+        try {
+            const values = JSON.parse(data);
+            if (Array.isArray(values) && values.length > 0) {
+                const range = newSheet.getRange(`A1:${String.fromCharCode(64 + values[0].length)}${values.length}`);
+                range.values = values;
+            }
+        } catch (e) {
+            // Data parsing failed, just create empty sheet
+        }
     }
 }
 
