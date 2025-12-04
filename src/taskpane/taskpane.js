@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "1.9.1";
+const VERSION = "2.0.0";
 
 import {
     detectTaskType,
@@ -76,6 +76,7 @@ function initApp() {
         state.mode = savedMode;
     }
     bindEvents();
+    initModeButtons();
     readExcelData().then(() => {
         // Show smart suggestions after data is loaded
         showSmartSuggestions();
@@ -151,6 +152,10 @@ function bindEvents() {
     
     // Theme toggle
     document.getElementById("themeBtn")?.addEventListener("click", toggleTheme);
+    
+    // Mode switch buttons
+    document.getElementById("editModeBtn")?.addEventListener("click", () => setMode("edit"));
+    document.getElementById("readOnlyModeBtn")?.addEventListener("click", () => setMode("readonly"));
     
     // Keyboard shortcuts
     document.addEventListener("keydown", handleKeyboardShortcuts);
@@ -1076,6 +1081,41 @@ function toggleTheme() {
     toast(newTheme === 'dark' ? 'Dark mode' : 'Light mode');
 }
 
+/**
+ * Sets the mode (edit or readonly)
+ */
+function setMode(mode) {
+    state.mode = mode;
+    localStorage.setItem("excel_copilot_mode", mode);
+    
+    // Update button states
+    const editBtn = document.getElementById("editModeBtn");
+    const readOnlyBtn = document.getElementById("readOnlyModeBtn");
+    
+    if (editBtn && readOnlyBtn) {
+        editBtn.classList.toggle("active", mode === "edit");
+        readOnlyBtn.classList.toggle("active", mode === "readonly");
+    }
+    
+    // Update apply button
+    updateApplyButtonState();
+    
+    toast(mode === "edit" ? "Edit mode" : "Read-only mode");
+}
+
+/**
+ * Initializes mode buttons based on saved state
+ */
+function initModeButtons() {
+    const editBtn = document.getElementById("editModeBtn");
+    const readOnlyBtn = document.getElementById("readOnlyModeBtn");
+    
+    if (editBtn && readOnlyBtn) {
+        editBtn.classList.toggle("active", state.mode === "edit");
+        readOnlyBtn.classList.toggle("active", state.mode === "readonly");
+    }
+}
+
 // ============================================================================
 // Keyboard Shortcuts
 // ============================================================================
@@ -1460,6 +1500,12 @@ async function handleApply() {
 
 async function executeAction(ctx, sheet, action) {
     const { type, target, source, validationType, chartType, data } = action;
+    
+    // Sheet creation doesn't need a range
+    if (type === "sheet") {
+        await createSheet(ctx, target, data);
+        return;
+    }
     
     if (!target) throw new Error("No target specified");
     
