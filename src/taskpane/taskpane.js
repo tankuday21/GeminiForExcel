@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.0.0";
+const VERSION = "2.0.1";
 
 import {
     detectTaskType,
@@ -640,8 +640,12 @@ async function callAI(userPrompt) {
         handleCorrection(userPrompt, state.lastAIResponse);
     }
     
-    // Build the enhanced system prompt
-    const systemPrompt = enhanced.systemPrompt;
+    // Build the enhanced system prompt - modify for read-only mode
+    let systemPrompt = enhanced.systemPrompt;
+    
+    if (state.mode === "readonly") {
+        systemPrompt = getReadOnlySystemPrompt();
+    }
     
     // Build the enhanced user message
     const fullUserMessage = `${dataContext}\n\n---\nUSER REQUEST: ${enhanced.userPrompt}`;
@@ -677,6 +681,32 @@ async function callAI(userPrompt) {
     const processed = processResponse(response);
     
     return processed.response;
+}
+
+/**
+ * Gets the system prompt for read-only mode
+ * In this mode, AI analyzes data and gives direct answers without formulas/actions
+ */
+function getReadOnlySystemPrompt() {
+    return `You are Excel Copilot in READ-ONLY mode. You are a data analyst assistant.
+
+## YOUR ROLE
+- Analyze the Excel data provided and give DIRECT ANSWERS
+- Do NOT provide formulas or ACTION tags
+- Do NOT suggest modifications to the spreadsheet
+- Calculate and compute answers yourself from the data provided
+- Give clear, concise answers with the actual values/numbers
+
+## EXAMPLES
+- If asked "How many rows have value X?" → Count from the data and say "There are 15 rows with value X"
+- If asked "What is the total of column B?" → Calculate and say "The total is 1,234"
+- If asked "How many times does 'd' appear?" → Count from the data and say "The letter 'd' appears 7 times"
+
+## IMPORTANT
+- You have access to ALL the data in the context
+- Perform calculations yourself and provide the answer
+- Be specific with numbers and values
+- Do NOT use ACTION tags - just provide text answers`;
 }
 
 function buildDataContext() {
