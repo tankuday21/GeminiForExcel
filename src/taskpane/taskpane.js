@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "1.9.0";
+const VERSION = "1.9.1";
 
 import {
     detectTaskType,
@@ -533,7 +533,15 @@ async function handleSend() {
         hideLoadingSkeleton();
         hideTaskTypeIndicator();
         
-        const { message, actions } = parseResponse(response);
+        // In read-only mode, don't parse actions - just show the response
+        let { message, actions } = parseResponse(response);
+        
+        if (state.mode === "readonly") {
+            // Strip out ACTION tags in read-only mode
+            actions = [];
+            message = response.replace(/<ACTION[\s\S]*?<\/ACTION>/g, "").trim();
+        }
+        
         state.pendingActions = actions;
         
         // Add task type badge to AI response
@@ -1513,7 +1521,9 @@ async function createSheet(ctx, sheetName, data) {
     }
     
     const sheets = ctx.workbook.worksheets;
-    const newSheet = sheets.add(sheetName);
+    // Use add() with proper parameters - name is optional, position is optional
+    const newSheet = sheets.add();
+    newSheet.name = sheetName;
     
     // If data is provided, populate it
     if (data) {
