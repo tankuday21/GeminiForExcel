@@ -274,6 +274,7 @@ function getCommonRules() {
 - validation: <ACTION type="validation" target="CELL" source="RANGE"></ACTION>
 - sort: <ACTION type="sort" target="DATARANGE">{"column":1,"ascending":true}</ACTION>
 - filter: <ACTION type="filter" target="DATARANGE">{"column":2,"values":["Mumbai"]}</ACTION>
+- clearFilter: <ACTION type="clearFilter" target="DATARANGE"></ACTION>
 - copy: <ACTION type="copy" target="DESTINATION" source="SOURCE"></ACTION>
 
 ## CONDITIONAL FORMATTING
@@ -321,7 +322,11 @@ To apply AutoFilter and filter by specific values:
 - column: 0-based index of the column to filter by (0=first column, 1=second, etc.)
 - values: Array of values to show (all other values will be hidden)
 
-**Note:** Filtering shows only the specified values and hides all others. To show all data again, the user can manually clear the filter in Excel.
+To REMOVE/CLEAR all filters and show all data:
+<ACTION type="clearFilter" target="A1:L51">
+</ACTION>
+
+**Note:** Use clearFilter when user says "remove filter", "clear filter", "show all data", or "remove filtering".
 
 ## COPYING DATA
 To copy data from one range to another:

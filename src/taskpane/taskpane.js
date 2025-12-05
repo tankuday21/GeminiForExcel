@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.4.4";
+const VERSION = "2.5.0";
 
 import {
     detectTaskType,
@@ -1609,6 +1609,10 @@ async function executeAction(ctx, sheet, action) {
             await applyFilter(ctx, sheet, range, data);
             break;
             
+        case "clearFilter":
+            await clearFilter(ctx, sheet);
+            break;
+            
         default:
             if (data) range.values = [[data]];
     }
@@ -1986,6 +1990,20 @@ async function applyFilter(ctx, sheet, range, data) {
         // Apply the filter criteria to the column
         sheet.autoFilter.apply(range, filterOpts.column, criteria);
         await ctx.sync();
+    }
+}
+
+/**
+ * Clears all filters from the worksheet
+ * @param {Object} ctx - Excel context
+ * @param {Object} sheet - Excel worksheet
+ */
+async function clearFilter(ctx, sheet) {
+    try {
+        sheet.autoFilter.clearCriteria();
+        await ctx.sync();
+    } catch (e) {
+        // No filter to clear, ignore
     }
 }
 
