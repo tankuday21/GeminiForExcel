@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.3.0";
+const VERSION = "2.3.1";
 
 import {
     detectTaskType,
@@ -1574,6 +1574,10 @@ async function executeAction(ctx, sheet, action) {
             await applyConditionalFormat(ctx, range, data);
             break;
             
+        case "clearFormat":
+            await clearConditionalFormat(ctx, range);
+            break;
+            
         case "validation":
             await applyValidation(ctx, sheet, range, source);
             break;
@@ -1751,6 +1755,14 @@ async function applyConditionalFormat(ctx, range, data) {
             operator: rule.operator // "GreaterThan", "LessThan", "EqualTo", etc.
         };
     }
+}
+
+/**
+ * Clears all conditional formatting from a range
+ */
+async function clearConditionalFormat(ctx, range) {
+    range.conditionalFormats.clearAll();
+    await ctx.sync();
 }
 
 async function applyValidation(ctx, sheet, range, source) {

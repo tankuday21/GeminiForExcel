@@ -281,6 +281,10 @@ To highlight cells based on conditions:
 {"type":"cellValue","operator":"GreaterThan","value":"40","fill":"#FFFF00"}
 </ACTION>
 
+To REMOVE/CLEAR conditional formatting:
+<ACTION type="clearFormat" target="C2:C51">
+</ACTION>
+
 Operators: "GreaterThan", "LessThan", "EqualTo", "NotEqualTo", "GreaterThanOrEqual", "LessThanOrEqual"
 Colors: Use hex codes like "#FFFF00" (yellow), "#FF0000" (red), "#00FF00" (green)
 
