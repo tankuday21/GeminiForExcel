@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.2.0";
+const VERSION = "2.3.0";
 
 import {
     detectTaskType,
@@ -1567,7 +1567,11 @@ async function executeAction(ctx, sheet, action) {
             break;
             
         case "format":
-            applyFormat(range, data);
+            await applyFormat(ctx, range, data);
+            break;
+            
+        case "conditionalFormat":
+            await applyConditionalFormat(ctx, range, data);
             break;
             
         case "validation":
@@ -1709,7 +1713,7 @@ function applyValues(range, data) {
     range.values = values;
 }
 
-function applyFormat(range, data) {
+async function applyFormat(ctx, range, data) {
     let fmt;
     try { fmt = JSON.parse(data); } catch { fmt = {}; }
     
@@ -1724,6 +1728,28 @@ function applyFormat(range, data) {
         range.format.borders.getItem("EdgeBottom").style = "Continuous";
         range.format.borders.getItem("EdgeLeft").style = "Continuous";
         range.format.borders.getItem("EdgeRight").style = "Continuous";
+    }
+}
+
+/**
+ * Applies conditional formatting to a range
+ */
+async function applyConditionalFormat(ctx, range, data) {
+    let rule;
+    try { rule = JSON.parse(data); } catch { rule = {}; }
+    
+    // Clear existing conditional formats
+    range.conditionalFormats.clearAll();
+    await ctx.sync();
+    
+    // Add conditional format based on rule type
+    if (rule.type === "cellValue" && rule.operator && rule.value) {
+        const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
+        cf.cellValue.format.fill.color = rule.fill || "#FFFF00";
+        cf.cellValue.rule = {
+            formula1: String(rule.value),
+            operator: rule.operator // "GreaterThan", "LessThan", "EqualTo", etc.
+        };
     }
 }
 

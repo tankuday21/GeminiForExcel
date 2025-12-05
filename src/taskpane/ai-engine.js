@@ -269,10 +269,20 @@ function getCommonRules() {
 - formula: <ACTION type="formula" target="CELL">=FORMULA</ACTION>
 - values: <ACTION type="values" target="RANGE">[["val"]]</ACTION>
 - format: <ACTION type="format" target="RANGE">{"bold":true}</ACTION>
+- conditionalFormat: <ACTION type="conditionalFormat" target="RANGE">{"type":"cellValue","operator":"GreaterThan","value":"40","fill":"#FFFF00"}</ACTION>
 - chart: <ACTION type="chart" target="RANGE" chartType="TYPE" title="TITLE" position="CELL"></ACTION>
 - validation: <ACTION type="validation" target="CELL" source="RANGE"></ACTION>
 - sort: <ACTION type="sort" target="DATARANGE">{"column":1,"ascending":true}</ACTION>
 - copy: <ACTION type="copy" target="DESTINATION" source="SOURCE"></ACTION>
+
+## CONDITIONAL FORMATTING
+To highlight cells based on conditions:
+<ACTION type="conditionalFormat" target="C2:C51">
+{"type":"cellValue","operator":"GreaterThan","value":"40","fill":"#FFFF00"}
+</ACTION>
+
+Operators: "GreaterThan", "LessThan", "EqualTo", "NotEqualTo", "GreaterThanOrEqual", "LessThanOrEqual"
+Colors: Use hex codes like "#FFFF00" (yellow), "#FF0000" (red), "#00FF00" (green)
 
 ## SORTING DATA
 To sort data, use the sort action type (NOT formulas like SORT()):
