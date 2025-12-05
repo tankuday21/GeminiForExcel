@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.4.2";
+const VERSION = "2.4.3";
 
 import {
     detectTaskType,
@@ -1963,16 +1963,25 @@ async function applyFilter(ctx, sheet, range, data) {
         filterOpts = data || {};
     }
     
+    // Clear any existing autofilter first
+    if (sheet.autoFilter.isDataFiltered) {
+        sheet.autoFilter.clearCriteria();
+    }
+    
     // Apply AutoFilter to the range
-    range.worksheet.autoFilter.apply(range);
+    sheet.autoFilter.apply(range);
     await ctx.sync();
     
     // If specific column filters are provided, apply them
     if (filterOpts.column !== undefined && filterOpts.values) {
-        const filter = range.worksheet.autoFilter.getColumnFilter(filterOpts.column);
+        // Get the filter criteria for the specified column
+        const criteria = {
+            filterOn: Excel.FilterOn.values,
+            values: filterOpts.values
+        };
         
-        // Apply values filter
-        filter.applyValuesFilter(filterOpts.values);
+        // Apply the filter criteria to the column
+        sheet.autoFilter.apply(range, filterOpts.column, criteria);
         await ctx.sync();
     }
 }
