@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.7.0";
+const VERSION = "2.7.1";
 
 import {
     detectTaskType,
@@ -2153,7 +2153,14 @@ async function removeDuplicates(ctx, range, data) {
     
     // Write back only unique rows
     if (uniqueRows.length > 0) {
-        const newRange = range.getResizedRange(uniqueRows.length - 1, colCount - 1);
+        // Get the sheet and create a new range reference from the original address
+        const sheet = range.worksheet;
+        const address = range.address.split("!")[1] || range.address; // Remove sheet name if present
+        const startCell = address.split(":")[0]; // Get starting cell (e.g., "A1")
+        
+        // Create a new range from the start cell
+        const targetCell = sheet.getRange(startCell);
+        const newRange = targetCell.getResizedRange(uniqueRows.length - 1, colCount - 1);
         newRange.values = uniqueRows;
     }
 }
