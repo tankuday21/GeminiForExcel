@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.1.0";
+const VERSION = "2.2.0";
 
 import {
     detectTaskType,
@@ -282,7 +282,14 @@ function addMessage(role, content, type = "") {
         <div class="msg-body">${formatText(content)}</div>
     `;
     chat.appendChild(msg);
-    chat.scrollTop = chat.scrollHeight;
+    
+    // Smooth scroll to bottom
+    setTimeout(() => {
+        chat.scrollTo({
+            top: chat.scrollHeight,
+            behavior: 'smooth'
+        });
+    }, 100);
 }
 
 function formatText(text) {
@@ -697,15 +704,22 @@ function getReadOnlySystemPrompt() {
 - Calculate and compute answers yourself from the data provided
 - Give clear, concise answers with the actual values/numbers
 
+## CRITICAL ACCURACY RULES
+1. **COUNT CAREFULLY**: When counting occurrences, examine EVERY cell in the data preview
+2. **CASE SENSITIVITY**: "d" and "D" are different - count only exact matches unless told otherwise
+3. **EMPTY CELLS**: Ignore empty/null cells in counts
+4. **VERIFY YOUR COUNT**: Double-check your answer before responding
+5. **BE PRECISE**: If you count 5 occurrences, say exactly 5, not approximately
+
 ## EXAMPLES
-- If asked "How many rows have value X?" → Count from the data and say "There are 15 rows with value X"
-- If asked "What is the total of column B?" → Calculate and say "The total is 1,234"
-- If asked "How many times does 'd' appear?" → Count from the data and say "The letter 'd' appears 7 times"
+- "How many times does 'd' appear?" → Examine each cell, count lowercase 'd' only → "There are exactly 5 occurrences of 'd'"
+- "What is the total of column B?" → Add all numbers in column B → "The total is 1,234"
+- "How many rows have value X?" → Count rows where value equals X → "There are 15 rows with value X"
 
 ## IMPORTANT
-- You have access to ALL the data in the context
-- Perform calculations yourself and provide the answer
-- Be specific with numbers and values
+- You have access to ALL the data in the DATA PREVIEW section
+- Count EVERY occurrence manually from the data shown
+- Be EXACT with your counts - accuracy is critical
 - Do NOT use ACTION tags - just provide text answers`;
 }
 

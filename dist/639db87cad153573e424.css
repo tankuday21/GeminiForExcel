@@ -1540,3 +1540,45 @@ body {
 .input-row .input-box {
     flex: 1;
 }
+
+/* Mode Toggle in Context Bar */
+.mode-toggle-compact {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-alt);
+    padding: 2px;
+    border-radius: 6px;
+}
+
+.mode-icon-sm {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+    transition: all 0.15s;
+}
+
+.mode-icon-sm svg {
+    width: 14px;
+    height: 14px;
+}
+
+.mode-icon-sm:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+
+.mode-icon-sm.active {
+    background: var(--primary);
+    color: #fff;
+}
+
+.mode-icon-sm.active svg {
+    stroke: #fff;
+}
