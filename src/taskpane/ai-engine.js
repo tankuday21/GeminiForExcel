@@ -273,6 +273,7 @@ function getCommonRules() {
 - chart: <ACTION type="chart" target="RANGE" chartType="TYPE" title="TITLE" position="CELL"></ACTION>
 - validation: <ACTION type="validation" target="CELL" source="RANGE"></ACTION>
 - sort: <ACTION type="sort" target="DATARANGE">{"column":1,"ascending":true}</ACTION>
+- filter: <ACTION type="filter" target="DATARANGE">{"column":2,"values":["Mumbai"]}</ACTION>
 - copy: <ACTION type="copy" target="DESTINATION" source="SOURCE"></ACTION>
 
 ## CONDITIONAL FORMATTING
@@ -309,6 +310,18 @@ To sort data, use the sort action type (NOT formulas like SORT()):
 - target: The full data range including headers (e.g., A1:L51)
 - column: 0-based index of the column to sort by (0=first column, 1=second, etc.)
 - ascending: true for A-Z/smallest first, false for Z-A/largest first
+
+## FILTERING DATA
+To apply AutoFilter and filter by specific values:
+<ACTION type="filter" target="A1:L51">
+{"column":2,"values":["Mumbai","Delhi"]}
+</ACTION>
+
+- target: The full data range including headers (e.g., A1:L51)
+- column: 0-based index of the column to filter by (0=first column, 1=second, etc.)
+- values: Array of values to show (all other values will be hidden)
+
+**Note:** Filtering shows only the specified values and hides all others. To show all data again, the user can manually clear the filter in Excel.
 
 ## COPYING DATA
 To copy data from one range to another:

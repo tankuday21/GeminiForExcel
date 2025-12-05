@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.4.0";
+const VERSION = "2.4.2";
 
 import {
     detectTaskType,
@@ -1605,6 +1605,10 @@ async function executeAction(ctx, sheet, action) {
             await createSheet(ctx, target, data);
             break;
             
+        case "filter":
+            await applyFilter(ctx, sheet, range, data);
+            break;
+            
         default:
             if (data) range.values = [[data]];
     }
@@ -1936,6 +1940,41 @@ function applySort(range, data) {
         hasHeaders, // hasHeaders - true means first row is header and won't be sorted
         Excel.SortOrientation.rows
     );
+}
+
+/**
+ * Applies AutoFilter to a range
+ * @param {Object} ctx - Excel context
+ * @param {Object} sheet - Excel worksheet
+ * @param {Object} range - Excel range
+ * @param {string} data - Filter criteria as JSON string
+ */
+async function applyFilter(ctx, sheet, range, data) {
+    let filterOpts = {};
+    
+    // Parse filter options
+    if (typeof data === "string") {
+        try {
+            filterOpts = JSON.parse(data);
+        } catch {
+            throw new Error("Invalid filter data format");
+        }
+    } else {
+        filterOpts = data || {};
+    }
+    
+    // Apply AutoFilter to the range
+    range.worksheet.autoFilter.apply(range);
+    await ctx.sync();
+    
+    // If specific column filters are provided, apply them
+    if (filterOpts.column !== undefined && filterOpts.values) {
+        const filter = range.worksheet.autoFilter.getColumnFilter(filterOpts.column);
+        
+        // Apply values filter
+        filter.applyValuesFilter(filterOpts.values);
+        await ctx.sync();
+    }
 }
 
 export { handleSend, handleApply, readExcelData, clearChat };
