@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.5.1";
+const VERSION = "2.5.2";
 
 import {
     detectTaskType,
@@ -65,6 +65,13 @@ Office.onReady((info) => {
 
 function initApp() {
     state.apiKey = localStorage.getItem(CONFIG.STORAGE_KEY) || "";
+    
+    // Update version badge
+    const versionBadge = document.getElementById("versionBadge");
+    if (versionBadge) {
+        versionBadge.textContent = `v${VERSION}`;
+    }
+    
     // Load saved theme
     const savedTheme = localStorage.getItem(CONFIG.THEME_KEY);
     if (savedTheme) {
