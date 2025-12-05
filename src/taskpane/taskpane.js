@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.0.2";
+const VERSION = "2.1.0";
 
 import {
     detectTaskType,
@@ -78,8 +78,7 @@ function initApp() {
     bindEvents();
     initModeButtons();
     readExcelData().then(() => {
-        // Show smart suggestions after data is loaded
-        showSmartSuggestions();
+        // Smart suggestions disabled for cleaner UI
     });
 }
 
@@ -254,15 +253,11 @@ async function readExcelData() {
             
             infoEl.textContent = `${sheetName}: ${rowCount} rows × ${colCount} cols`;
             
-            // Show smart suggestions based on data
-            if (state.isFirstMessage) {
-                showSmartSuggestions();
-            }
+            // Smart suggestions disabled for cleaner UI
         });
     } catch (e) {
         infoEl.textContent = "No data";
         state.currentData = null;
-        hideSmartSuggestions();
     }
 }
 
@@ -536,7 +531,6 @@ async function handleSend() {
     
     showTyping();
     showLoadingSkeleton();
-    hideSmartSuggestions();
     
     try {
         const response = await callAI(prompt);

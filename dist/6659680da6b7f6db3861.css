@@ -1460,3 +1460,83 @@ body {
     width: 18px;
     height: 18px;
 }
+
+/* Compact Mode Icons */
+.input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.mode-icons {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.mode-icon {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: var(--bg-alt);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+    transition: all 0.2s;
+    position: relative;
+}
+
+.mode-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.mode-icon:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+
+.mode-icon.active {
+    background: var(--primary);
+    color: #fff;
+}
+
+.mode-icon.active svg {
+    stroke: #fff;
+}
+
+/* Tooltip for mode icons */
+.mode-icon[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    left: 40px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--text);
+    color: var(--bg);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    z-index: 100;
+    pointer-events: none;
+}
+
+.mode-icon[title]:hover::before {
+    content: '';
+    position: absolute;
+    left: 34px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 5px solid transparent;
+    border-right-color: var(--text);
+    z-index: 100;
+}
+
+/* Input box takes remaining space */
+.input-row .input-box {
+    flex: 1;
+}
