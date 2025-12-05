@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.6.2";
+const VERSION = "2.6.3";
 
 import {
     detectTaskType,
@@ -1743,8 +1743,12 @@ async function applyCopyValues(ctx, sheet, source, target) {
     const rowCount = sourceRange.rowCount;
     const colCount = sourceRange.columnCount;
     
-    // If target is a single cell, resize it to match source dimensions
-    const targetCell = sheet.getRange(target);
+    // Parse target to get the starting cell
+    // If target is already a range (e.g., "A2:A51"), extract just the first cell
+    const targetAddress = target.includes(":") ? target.split(":")[0] : target;
+    
+    // Get the starting cell and resize to match source
+    const targetCell = sheet.getRange(targetAddress);
     const targetRange = targetCell.getResizedRange(rowCount - 1, colCount - 1);
     
     // Copy only values (converts formulas to their results)
