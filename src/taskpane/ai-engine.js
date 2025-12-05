@@ -293,6 +293,7 @@ function getCommonRules() {
 - filter: <ACTION type="filter" target="DATARANGE">{"column":2,"values":["Mumbai"]}</ACTION>
 - clearFilter: <ACTION type="clearFilter" target="DATARANGE"></ACTION>
 - copy: <ACTION type="copy" target="DESTINATION" source="SOURCE"></ACTION>
+- copyValues: <ACTION type="copyValues" target="DESTINATION" source="SOURCE"></ACTION>
 
 ## CONDITIONAL FORMATTING
 **CRITICAL: For multiple conditions on the same range, use a SINGLE ACTION with an ARRAY of rules!**
@@ -346,12 +347,17 @@ To REMOVE/CLEAR all filters and show all data:
 **Note:** Use clearFilter when user says "remove filter", "clear filter", "show all data", or "remove filtering".
 
 ## COPYING DATA
-To copy data from one range to another:
+To copy formulas and formatting from one range to another:
 <ACTION type="copy" target="A52" source="A1:L51">
+</ACTION>
+
+To copy ONLY VALUES (no formulas) - useful for replacing original data with cleaned values:
+<ACTION type="copyValues" target="A2" source="F2:F51">
 </ACTION>
 
 - source: The range to copy FROM
 - target: The starting cell to paste TO (top-left corner of destination)
+- Use "copyValues" when replacing original data with formula results (e.g., after TRIM, UPPER, etc.)
 
 ## CREATING SHEETS
 To create a new sheet:

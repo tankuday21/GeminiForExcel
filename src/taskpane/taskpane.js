@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.5.5";
+const VERSION = "2.6.0";
 
 import {
     detectTaskType,
@@ -66,10 +66,12 @@ Office.onReady((info) => {
 function initApp() {
     state.apiKey = localStorage.getItem(CONFIG.STORAGE_KEY) || "";
     
-    // Update version badge
+    // Update version badge and add click handler
     const versionBadge = document.getElementById("versionBadge");
     if (versionBadge) {
         versionBadge.textContent = `v${VERSION}`;
+        versionBadge.style.cursor = "pointer";
+        versionBadge.addEventListener("click", checkForUpdates);
     }
     
     // Load saved theme
@@ -503,6 +505,51 @@ function toast(msg) {
     t.textContent = msg;
     t.classList.add("show");
     setTimeout(() => t.classList.remove("show"), 2000);
+}
+
+/**
+ * Checks for updates by fetching the deployed version
+ */
+async function checkForUpdates() {
+    const versionBadge = document.getElementById("versionBadge");
+    const originalText = versionBadge.textContent;
+    
+    try {
+        versionBadge.textContent = "Checking...";
+        
+        // Fetch the deployed taskpane.js with cache-busting
+        const response = await fetch(`https://tankuday21.github.io/GeminiForExcel/taskpane.js?t=${Date.now()}`);
+        const code = await response.text();
+        
+        // Extract version from the deployed code
+        const versionMatch = code.match(/const VERSION = "([^"]+)"/);
+        
+        if (versionMatch) {
+            const deployedVersion = versionMatch[1];
+            const currentVersion = VERSION;
+            
+            if (deployedVersion === currentVersion) {
+                toast("✓ You're on the latest version!");
+                versionBadge.textContent = originalText;
+            } else {
+                toast(`Update available: v${deployedVersion}`);
+                versionBadge.textContent = `v${currentVersion} → v${deployedVersion}`;
+                versionBadge.style.color = "#ff9800";
+                
+                // Reset after 5 seconds
+                setTimeout(() => {
+                    versionBadge.textContent = originalText;
+                    versionBadge.style.color = "";
+                }, 5000);
+            }
+        } else {
+            throw new Error("Could not parse version");
+        }
+    } catch (error) {
+        console.error("Update check failed:", error);
+        toast("Failed to check for updates");
+        versionBadge.textContent = originalText;
+    }
 }
 
 // ============================================================================
@@ -1606,6 +1653,10 @@ async function executeAction(ctx, sheet, action) {
             
         case "copy":
             await applyCopy(ctx, sheet, source, target);
+            break;
+            
+        case "copyValues":
+            await applyCopyValues(ctx, sheet, source, target);
             break;
             
         case "sheet":
