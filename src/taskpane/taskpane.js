@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.4.3";
+const VERSION = "2.4.4";
 
 import {
     detectTaskType,
@@ -1963,9 +1963,12 @@ async function applyFilter(ctx, sheet, range, data) {
         filterOpts = data || {};
     }
     
-    // Clear any existing autofilter first
-    if (sheet.autoFilter.isDataFiltered) {
+    // Try to clear any existing autofilter (ignore errors if none exists)
+    try {
         sheet.autoFilter.clearCriteria();
+        await ctx.sync();
+    } catch (e) {
+        // No existing filter, continue
     }
     
     // Apply AutoFilter to the range
