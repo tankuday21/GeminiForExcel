@@ -33,7 +33,8 @@ const TASK_KEYWORDS = {
         "formula", "sum", "average", "count", "vlookup", "xlookup", "if", "calculate",
         "total", "add up", "multiply", "divide", "percentage", "sumif", "countif",
         "index", "match", "concatenate", "lookup", "function",
-        "clean", "trim", "upper", "lower", "remove spaces", "text manipulation"
+        "clean", "trim", "upper", "lower", "remove spaces", "text manipulation",
+        "convert", "proper case", "title case", "capitalize"
     ],
     [TASK_TYPES.CHART]: [
         "chart", "graph", "visualize", "plot", "pie", "bar", "line", "column",
@@ -101,21 +102,21 @@ const TASK_PROMPTS = {
 ## CRITICAL: DATA CLEANING IN-PLACE
 **NEVER apply formulas to the same column they reference (causes circular reference)!**
 
-When cleaning data (TRIM, UPPER, LOWER, etc.):
-- **WRONG**: Apply =TRIM(C2) to C2 (circular reference!)
-- **RIGHT**: Apply =TRIM(C2) to a NEW column (like H2), then use copyValues to replace
+When cleaning/converting data (TRIM, UPPER, LOWER, PROPER, etc.):
+- **WRONG**: Apply =TRIM(C2) to C2 or =PROPER(D2) to D2 (circular reference!)
+- **RIGHT**: Apply formula to a NEW column (like H2), then use copyValues to replace
 
-Example for "Clean Name column":
+Example for "Convert City to Proper Case":
 Step 1 - Create formulas in helper column:
 <ACTION type="formula" target="H2:H51">
-=TRIM(C2)
+=PROPER(D2)
 </ACTION>
 
-Step 2 - If user asks to "replace" or "update original":
-<ACTION type="copyValues" target="C2" source="H2:H51">
+Step 2 - Copy values back to original column:
+<ACTION type="copyValues" target="D2" source="H2:H51">
 </ACTION>
 
-Then explain: "I've replaced the original values with the cleaned data."
+**ALWAYS use both steps for data cleaning/conversion!**
 
 ## OUTPUT FORMAT
 Always provide formulas in ACTION tags:
