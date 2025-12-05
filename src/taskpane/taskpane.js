@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.9.1";
+const VERSION = "2.9.2";
 
 import {
     detectTaskType,
@@ -1700,7 +1700,7 @@ async function executeAction(ctx, sheet, action) {
             break;
             
         case "chart":
-            createChart(sheet, range, action);
+            await createChart(ctx, sheet, range, action);
             break;
             
         case "pivotChart":
@@ -2008,9 +2008,17 @@ async function applyValidation(ctx, sheet, range, source) {
     }
 }
 
-function createChart(sheet, dataRange, action) {
+async function createChart(ctx, sheet, dataRange, action) {
     const { chartType, data } = action;
     const ct = (chartType || "column").toLowerCase();
+    
+    // Load data to analyze it
+    dataRange.load(["values", "rowCount", "columnCount", "rowIndex", "columnIndex"]);
+    await ctx.sync();
+    
+    const values = dataRange.values;
+    const headers = values[0];
+    const rowCount = dataRange.rowCount;
     
     // Parse additional options from data if provided
     let title = "Chart";
@@ -2019,6 +2027,68 @@ function createChart(sheet, dataRange, action) {
     // Try to extract title and position from action attributes or data
     if (action.title) title = action.title;
     if (action.position) position = action.position;
+    
+    // SMART DETECTION: If data has many rows with text categories, aggregate it
+    let shouldAggregate = false;
+    let categoryCol = -1;
+    let valueCol = -1;
+    
+    // Check if we have a text column (categories) and need to count/sum
+    if (rowCount > 10 && headers.length >= 2) {
+        // Find first text column (likely category)
+        for (let c = 0; c < headers.length; c++) {
+            const sample = values.slice(1, Math.min(6, values.length)).map(r => r[c]);
+            const hasText = sample.some(v => typeof v === "string" && v.length > 0);
+            const hasRepeats = new Set(sample).size < sample.length;
+            if (hasText && hasRepeats) {
+                categoryCol = c;
+                break;
+            }
+        }
+        
+        // Find numeric column or use count
+        for (let c = 0; c < headers.length; c++) {
+            if (c === categoryCol) continue;
+            const sample = values.slice(1, Math.min(6, values.length)).map(r => r[c]);
+            const hasNumbers = sample.some(v => typeof v === "number" || !isNaN(parseFloat(v)));
+            if (hasNumbers) {
+                valueCol = c;
+                break;
+            }
+        }
+        
+        shouldAggregate = categoryCol !== -1;
+    }
+    
+    // If we should aggregate, do it
+    if (shouldAggregate) {
+        const aggregated = {};
+        for (let r = 1; r < values.length; r++) {
+            const key = String(values[r][categoryCol] || "").trim();
+            if (!key) continue;
+            if (!aggregated[key]) aggregated[key] = { count: 0, sum: 0 };
+            aggregated[key].count++;
+            if (valueCol !== -1) {
+                const val = parseFloat(values[r][valueCol]);
+                if (!isNaN(val)) aggregated[key].sum += val;
+            }
+        }
+        
+        // Create aggregated data
+        const aggData = Object.entries(aggregated)
+            .map(([key, data]) => [key, valueCol !== -1 ? data.sum : data.count])
+            .sort((a, b) => b[1] - a[1]);
+        
+        // Write aggregated data below original
+        const aggStartRow = dataRange.rowIndex + rowCount + 2;
+        const aggValues = [[headers[categoryCol] || "Category", valueCol !== -1 ? headers[valueCol] : "Count"], ...aggData];
+        const aggRange = sheet.getRangeByIndexes(aggStartRow, dataRange.columnIndex, aggValues.length, 2);
+        aggRange.values = aggValues;
+        await ctx.sync();
+        
+        // Use aggregated data for chart
+        dataRange = aggRange;
+    }
     
     // Determine chart type
     let type = Excel.ChartType.columnClustered;
