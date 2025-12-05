@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.7.2";
+const VERSION = "2.7.3";
 
 import {
     detectTaskType,
@@ -1769,15 +1769,38 @@ async function applyFormula(range, formula) {
         return;
     }
     
-    // For multi-row ranges, use autofill (most reliable method)
-    // This works for any size and Excel handles the formula adjustment automatically
+    // For multi-row ranges, try autofill first, fallback to manual if it fails
     if (rows > 1) {
-        // Set formula in first cell only
-        const firstCell = range.getCell(0, 0);
-        firstCell.formulas = [[formula]];
-        
-        // Use autofill to copy down (Excel handles this efficiently)
-        firstCell.autoFill(range, Excel.AutoFillType.fillDefault);
+        try {
+            // Set formula in first cell only
+            const firstCell = range.getCell(0, 0);
+            firstCell.formulas = [[formula]];
+            
+            // Use autofill to copy down (Excel handles this efficiently)
+            firstCell.autoFill(range, Excel.AutoFillType.fillDefault);
+            return;
+        } catch (e) {
+            // Autofill failed, fall through to manual method
+            console.warn("Autofill failed, using manual formula array:", e);
+        }
+    }
+    
+    // Manual method: build formula array for multi-row ranges
+    if (rows > 1 && cols === 1) {
+        const formulas = [];
+        for (let r = 0; r < rows; r++) {
+            let f = formula;
+            if (r > 0) {
+                // Adjust row numbers in cell references
+                f = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (match, colAbs, col, rowAbs, row) => {
+                    if (rowAbs === "$") return match;
+                    const newRow = parseInt(row) + r;
+                    return `${colAbs}${col}${rowAbs}${newRow}`;
+                });
+            }
+            formulas.push([f]);
+        }
+        range.formulas = formulas;
         return;
     }
     
