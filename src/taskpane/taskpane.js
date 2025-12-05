@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.9.2";
+const VERSION = "2.9.3";
 
 import {
     detectTaskType,
@@ -2046,15 +2046,29 @@ async function createChart(ctx, sheet, dataRange, action) {
             }
         }
         
-        // Find numeric column or use count
+        // Find meaningful numeric column (not IDs)
         for (let c = 0; c < headers.length; c++) {
             if (c === categoryCol) continue;
-            const sample = values.slice(1, Math.min(6, values.length)).map(r => r[c]);
-            const hasNumbers = sample.some(v => typeof v === "number" || !isNaN(parseFloat(v)));
-            if (hasNumbers) {
-                valueCol = c;
-                break;
-            }
+            
+            const header = String(headers[c] || "").toLowerCase();
+            const sample = values.slice(1, Math.min(10, values.length)).map(r => r[c]);
+            const hasNumbers = sample.every(v => typeof v === "number" || !isNaN(parseFloat(v)));
+            
+            if (!hasNumbers) continue;
+            
+            // Skip if it looks like an ID column (sequential, unique, or has "id" in name)
+            const isID = header.includes("id") || header.includes("no") || header.includes("number");
+            const numericSample = sample.map(v => parseFloat(v)).filter(v => !isNaN(v));
+            const isSequential = numericSample.length > 3 && 
+                numericSample.every((v, i) => i === 0 || v > numericSample[i-1]);
+            const isUnique = new Set(numericSample).size === numericSample.length;
+            
+            // Skip ID-like columns
+            if (isID || (isSequential && isUnique)) continue;
+            
+            // This looks like a meaningful numeric column
+            valueCol = c;
+            break;
         }
         
         shouldAggregate = categoryCol !== -1;
