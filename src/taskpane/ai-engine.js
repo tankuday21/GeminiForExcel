@@ -32,7 +32,8 @@ const TASK_KEYWORDS = {
     [TASK_TYPES.FORMULA]: [
         "formula", "sum", "average", "count", "vlookup", "xlookup", "if", "calculate",
         "total", "add up", "multiply", "divide", "percentage", "sumif", "countif",
-        "index", "match", "concatenate", "lookup", "function"
+        "index", "match", "concatenate", "lookup", "function",
+        "clean", "trim", "upper", "lower", "remove spaces", "text manipulation"
     ],
     [TASK_TYPES.CHART]: [
         "chart", "graph", "visualize", "plot", "pie", "bar", "line", "column",
