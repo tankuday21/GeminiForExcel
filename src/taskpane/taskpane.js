@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.7.3";
+const VERSION = "2.8.0";
 
 import {
     detectTaskType,
@@ -35,6 +35,7 @@ const state = {
     apiKey: "",
     pendingActions: [],
     currentData: null,
+    allSheetsData: [],       // Data from all sheets in workbook
     conversationHistory: [],
     isFirstMessage: true,
     lastAIResponse: "",      // Track last AI response for corrections
@@ -217,56 +218,81 @@ async function readExcelData() {
     
     try {
         await Excel.run(async (ctx) => {
-            const sheet = ctx.workbook.worksheets.getActiveWorksheet();
-            const usedRange = sheet.getUsedRange();
-            
-            sheet.load("name");
-            usedRange.load(["address", "values", "rowCount", "columnCount", "columnIndex", "rowIndex"]);
-            
+            const sheets = ctx.workbook.worksheets;
+            sheets.load("items");
             await ctx.sync();
             
-            const sheetName = sheet.name;
-            const values = usedRange.values;
-            const startCol = usedRange.columnIndex;
-            const startRow = usedRange.rowIndex;
-            const rowCount = usedRange.rowCount;
-            const colCount = usedRange.columnCount;
+            // Read all sheets (limit to first 10 to avoid overwhelming context)
+            const allSheetsData = [];
+            const maxSheets = Math.min(sheets.items.length, 10);
             
-            // Detect headers (first row)
-            const headers = values[0] || [];
-            
-            // Build column mapping
-            const columnMap = [];
-            for (let c = 0; c < colCount; c++) {
-                const colLetter = colIndexToLetter(startCol + c);
-                const headerName = headers[c] || `Column ${colLetter}`;
-                columnMap.push({
-                    letter: colLetter,
-                    index: c,
-                    header: headerName
-                });
+            for (let i = 0; i < maxSheets; i++) {
+                const sheet = sheets.items[i];
+                try {
+                    const usedRange = sheet.getUsedRange();
+                    sheet.load("name");
+                    usedRange.load(["address", "values", "rowCount", "columnCount", "columnIndex", "rowIndex"]);
+                    await ctx.sync();
+                    
+                    const sheetName = sheet.name;
+                    const values = usedRange.values;
+                    const startCol = usedRange.columnIndex;
+                    const startRow = usedRange.rowIndex;
+                    const rowCount = usedRange.rowCount;
+                    const colCount = usedRange.columnCount;
+                    
+                    // Detect headers (first row)
+                    const headers = values[0] || [];
+                    
+                    // Build column mapping
+                    const columnMap = [];
+                    for (let c = 0; c < colCount; c++) {
+                        const colLetter = colIndexToLetter(startCol + c);
+                        const headerName = headers[c] || `Column ${colLetter}`;
+                        columnMap.push({
+                            letter: colLetter,
+                            index: c,
+                            header: headerName
+                        });
+                    }
+                    
+                    allSheetsData.push({
+                        sheetName,
+                        address: usedRange.address,
+                        values,
+                        headers,
+                        columnMap,
+                        startRow: startRow + 1,
+                        startCol: colIndexToLetter(startCol),
+                        rowCount,
+                        colCount,
+                        dataStartRow: startRow + 2
+                    });
+                } catch (e) {
+                    // Sheet might be empty, skip it
+                    console.warn(`Skipping sheet ${sheet.name}:`, e);
+                }
             }
             
-            state.currentData = {
-                sheetName,
-                address: usedRange.address,
-                values,
-                headers,
-                columnMap,
-                startRow: startRow + 1, // 1-based
-                startCol: colIndexToLetter(startCol),
-                rowCount,
-                colCount,
-                dataStartRow: startRow + 2 // Data starts after header (1-based)
-            };
+            // Set current data to active sheet
+            const activeSheet = ctx.workbook.worksheets.getActiveWorksheet();
+            activeSheet.load("name");
+            await ctx.sync();
             
-            infoEl.textContent = `${sheetName}: ${rowCount} rows × ${colCount} cols`;
+            const activeSheetData = allSheetsData.find(s => s.sheetName === activeSheet.name);
+            state.currentData = activeSheetData || allSheetsData[0] || null;
+            state.allSheetsData = allSheetsData;
             
-            // Smart suggestions disabled for cleaner UI
+            if (state.currentData) {
+                infoEl.textContent = `${state.currentData.sheetName}: ${state.currentData.rowCount} rows × ${state.currentData.colCount} cols (${allSheetsData.length} sheets)`;
+            } else {
+                infoEl.textContent = "No data";
+            }
         });
     } catch (e) {
         infoEl.textContent = "No data";
         state.currentData = null;
+        state.allSheetsData = [];
     }
 }
 
@@ -785,7 +811,15 @@ function buildDataContext() {
     const { sheetName, values, columnMap, rowCount, colCount, dataStartRow, address } = state.currentData;
     
     let context = `## EXCEL WORKBOOK DATA\n\n`;
-    context += `**Sheet:** ${sheetName}\n`;
+    
+    // List all sheets in workbook
+    if (state.allSheetsData && state.allSheetsData.length > 1) {
+        context += `**Available Sheets:** ${state.allSheetsData.map(s => s.sheetName).join(", ")}\n`;
+        context += `**Active Sheet:** ${sheetName}\n\n`;
+    } else {
+        context += `**Sheet:** ${sheetName}\n`;
+    }
+    
     context += `**Data Range:** ${address}\n`;
     context += `**Total Rows:** ${rowCount} (including header)\n`;
     context += `**Total Columns:** ${colCount}\n\n`;
@@ -853,6 +887,28 @@ function buildDataContext() {
             if (uniqueVals.size > 20) context += ` ... (${uniqueVals.size} total)`;
             context += `\n`;
         }
+    }
+    
+    // Add information about other sheets
+    if (state.allSheetsData && state.allSheetsData.length > 1) {
+        context += `\n## OTHER SHEETS IN WORKBOOK\n`;
+        for (const sheet of state.allSheetsData) {
+            if (sheet.sheetName === sheetName) continue; // Skip current sheet
+            
+            context += `\n### ${sheet.sheetName}\n`;
+            context += `- Columns: ${sheet.headers.join(", ")}\n`;
+            context += `- Rows: ${sheet.rowCount}\n`;
+            
+            // Show first few rows as sample
+            if (sheet.values.length > 1) {
+                context += `- Sample data (first 3 rows):\n`;
+                for (let r = 0; r < Math.min(3, sheet.values.length); r++) {
+                    const row = sheet.values[r];
+                    context += `  ${r === 0 ? "Headers" : `Row ${r}`}: ${row.slice(0, 5).join(" | ")}\n`;
+                }
+            }
+        }
+        context += `\n**Note:** You can reference data from any sheet using sheet name (e.g., DeptManagers!A2:B10)\n`;
     }
     
     return context;
