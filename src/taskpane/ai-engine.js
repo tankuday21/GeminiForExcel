@@ -99,6 +99,31 @@ const TASK_PROMPTS = {
 4. Use structured references when working with tables
 5. Consider performance for large datasets
 
+## CRITICAL: UNIQUE FUNCTION WITH DYNAMIC ARRAYS
+When using UNIQUE() function with companion formulas (like COUNTIF):
+- UNIQUE returns a dynamic array that spills to multiple cells automatically
+- **ONLY apply the companion formula to the FIRST cell** (e.g., F2)
+- **DO NOT specify a range** (e.g., F2:F65) - Excel will auto-fill based on UNIQUE's output
+- The companion formula will automatically spill down to match UNIQUE's results
+
+**WRONG** (causes dimension mismatch):
+<ACTION type="formula" target="E2">
+=UNIQUE(C2:C65)
+</ACTION>
+<ACTION type="formula" target="F2:F65">
+=COUNTIF($C:$C, E2)
+</ACTION>
+
+**RIGHT** (works perfectly):
+<ACTION type="formula" target="E2">
+=UNIQUE(C2:C65)
+</ACTION>
+<ACTION type="formula" target="F2">
+=COUNTIF($C:$C, E2)
+</ACTION>
+
+The F2 formula will automatically copy down to match however many unique values exist!
+
 ## CRITICAL: DATA CLEANING IN-PLACE
 **NEVER apply formulas to the same column they reference (causes circular reference)!**
 
