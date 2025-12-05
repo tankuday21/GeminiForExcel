@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.9.0";
+const VERSION = "2.9.1";
 
 import {
     detectTaskType,
@@ -2108,19 +2108,44 @@ async function createPivotChart(ctx, sheet, range, action) {
     if (action.title) options.title = action.title;
     if (action.position) options.position = action.position;
     
-    // Find columns
-    const groupByIdx = headers.findIndex(h => String(h).toLowerCase() === String(options.groupBy).toLowerCase());
-    const aggregateIdx = options.aggregate ? headers.findIndex(h => String(h).toLowerCase() === String(options.aggregate).toLowerCase()) : -1;
+    // Find columns - be more flexible with matching
+    let groupByIdx = -1;
+    for (let i = 0; i < headers.length; i++) {
+        const header = String(headers[i]).toLowerCase().trim();
+        const searchTerm = String(options.groupBy || "").toLowerCase().trim();
+        if (header === searchTerm || header.includes(searchTerm) || searchTerm.includes(header)) {
+            groupByIdx = i;
+            break;
+        }
+    }
     
-    if (groupByIdx === -1) throw new Error(`Column "${options.groupBy}" not found`);
+    if (groupByIdx === -1) {
+        console.error("Available headers:", headers);
+        throw new Error(`Column "${options.groupBy}" not found. Available: ${headers.join(", ")}`);
+    }
+    
+    let aggregateIdx = -1;
+    if (options.aggregate) {
+        for (let i = 0; i < headers.length; i++) {
+            const header = String(headers[i]).toLowerCase().trim();
+            const searchTerm = String(options.aggregate).toLowerCase().trim();
+            if (header === searchTerm || header.includes(searchTerm) || searchTerm.includes(header)) {
+                aggregateIdx = i;
+                break;
+            }
+        }
+    }
     
     // Aggregate data
     const aggregated = {};
     for (let r = 1; r < values.length; r++) {
-        const key = String(values[r][groupByIdx] || "");
-        if (!key) continue;
+        const groupValue = values[r][groupByIdx];
+        const key = String(groupValue || "").trim();
+        if (!key || key === "null" || key === "undefined") continue;
+        
         if (!aggregated[key]) aggregated[key] = { count: 0, sum: 0, values: [] };
         aggregated[key].count++;
+        
         if (aggregateIdx !== -1) {
             const val = parseFloat(values[r][aggregateIdx]);
             if (!isNaN(val)) {
@@ -2134,12 +2159,25 @@ async function createPivotChart(ctx, sheet, range, action) {
     const chartData = [];
     for (const [key, data] of Object.entries(aggregated)) {
         let value;
-        switch (options.aggregateFunc.toLowerCase()) {
-            case "count": value = data.count; break;
-            case "average": case "avg": value = data.values.length > 0 ? data.sum / data.values.length : 0; break;
-            case "max": value = data.values.length > 0 ? Math.max(...data.values) : 0; break;
-            case "min": value = data.values.length > 0 ? Math.min(...data.values) : 0; break;
-            default: value = data.sum; break;
+        const func = (options.aggregateFunc || "count").toLowerCase();
+        switch (func) {
+            case "count": 
+                value = data.count; 
+                break;
+            case "average": 
+            case "avg": 
+                value = data.values.length > 0 ? data.sum / data.values.length : data.count; 
+                break;
+            case "max": 
+                value = data.values.length > 0 ? Math.max(...data.values) : data.count; 
+                break;
+            case "min": 
+                value = data.values.length > 0 ? Math.min(...data.values) : data.count; 
+                break;
+            case "sum":
+            default: 
+                value = data.values.length > 0 ? data.sum : data.count; 
+                break;
         }
         chartData.push([key, value]);
     }
