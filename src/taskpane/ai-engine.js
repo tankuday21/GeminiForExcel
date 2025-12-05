@@ -150,10 +150,19 @@ Explain what the formula does and why you chose this approach.`,
 5. For line/trend charts, ensure date/time is in the first column of the range
 
 ## OUTPUT FORMAT
+**CRITICAL: You MUST use ACTION tags! Never output raw JSON!**
+
 <ACTION type="chart" target="DATARANGE" chartType="TYPE" title="TITLE" position="CELL">
 </ACTION>
 
 Example for trend: target="A1:G100" (full range), NOT "B1:B100,G1:G100"
+
+**WRONG (Don't do this):**
+[{"action": "chart", "target": "A1:C58"}]
+
+**RIGHT (Always do this):**
+<ACTION type="chart" target="A1:C58" chartType="column" title="My Chart" position="F2">
+</ACTION>
 
 Always explain why you chose this chart type and what story it tells.`,
 
@@ -287,6 +296,13 @@ function getTaskSpecificPrompt(taskType, corrections = {}) {
  */
 function getCommonRules() {
     return `
+
+## CRITICAL OUTPUT FORMAT RULES
+**YOU MUST USE ACTION TAGS - NEVER OUTPUT RAW JSON OR PLAIN TEXT FOR ACTIONS!**
+
+WRONG: [{"action": "chart", "target": "A1:C58"}]
+WRONG: {"type": "formula", "target": "A2"}
+RIGHT: <ACTION type="chart" target="A1:C58" chartType="column" title="Chart" position="F2"></ACTION>
 
 ## CRITICAL RULES
 1. **CHECK THE COLUMN STRUCTURE TABLE** - Find the exact column letter for each header name
