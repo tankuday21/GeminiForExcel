@@ -97,6 +97,22 @@ const TASK_PROMPTS = {
 4. Use structured references when working with tables
 5. Consider performance for large datasets
 
+## CRITICAL: DATA CLEANING IN-PLACE
+**NEVER apply formulas to the same column they reference (causes circular reference)!**
+
+When cleaning data (TRIM, UPPER, LOWER, etc.):
+- **WRONG**: Apply =TRIM(C2) to C2 (circular reference!)
+- **RIGHT**: Apply =TRIM(C2) to a NEW column (like H2), then tell user to copy values back
+
+Example for "Clean Name column":
+<ACTION type="formula" target="H2:H51">
+=TRIM(C2)
+</ACTION>
+
+Then explain: "I've created cleaned values in column H. To replace the original:
+1. Copy column H
+2. Right-click column C → Paste Special → Values"
+
 ## OUTPUT FORMAT
 Always provide formulas in ACTION tags:
 <ACTION type="formula" target="CELL">
