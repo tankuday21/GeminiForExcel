@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.8.0";
+const VERSION = "2.8.1";
 
 import {
     detectTaskType,
@@ -40,7 +40,7 @@ const state = {
     isFirstMessage: true,
     lastAIResponse: "",      // Track last AI response for corrections
     currentTaskType: null,   // Track current task type
-    mode: "edit",            // "edit" or "readonly"
+    worksheetScope: "single", // "single" or "all" - controls multi-sheet access
     // Preview state
     preview: {
         selections: [],      // boolean[] - selection state for each action
@@ -80,10 +80,11 @@ function initApp() {
     if (savedTheme) {
         document.documentElement.setAttribute('data-theme', savedTheme);
     }
-    // Load saved mode preference
-    const savedMode = localStorage.getItem("excel_copilot_mode");
-    if (savedMode) {
-        state.mode = savedMode;
+    
+    // Load saved worksheet scope preference
+    const savedScope = localStorage.getItem("excel_copilot_worksheet_scope");
+    if (savedScope) {
+        state.worksheetScope = savedScope;
     }
     bindEvents();
     initModeButtons();
@@ -121,8 +122,8 @@ function bindEvents() {
     
     document.getElementById("settingsBtn")?.addEventListener("click", () => {
         document.getElementById("apiKeyInput").value = state.apiKey;
-        // Set mode radio button
-        document.getElementById(state.mode === "readonly" ? "modeReadOnly" : "modeEdit").checked = true;
+        // Set worksheet scope radio button
+        document.getElementById(state.worksheetScope === "all" ? "scopeAll" : "scopeSingle").checked = true;
         document.getElementById("modal").classList.add("open");
     });
     
@@ -132,13 +133,13 @@ function bindEvents() {
         state.apiKey = document.getElementById("apiKeyInput").value.trim();
         localStorage.setItem(CONFIG.STORAGE_KEY, state.apiKey);
         
-        // Save mode preference
-        const selectedMode = document.querySelector('input[name="mode"]:checked')?.value || "edit";
-        state.mode = selectedMode;
-        localStorage.setItem("excel_copilot_mode", selectedMode);
+        // Save worksheet scope preference
+        const selectedScope = document.querySelector('input[name="worksheetScope"]:checked')?.value || "single";
+        state.worksheetScope = selectedScope;
+        localStorage.setItem("excel_copilot_worksheet_scope", selectedScope);
         
-        // Update apply button state
-        updateApplyButtonState();
+        // Refresh data to apply new scope
+        readExcelData();
         
         closeModal();
         toast("Saved");
@@ -222,12 +223,21 @@ async function readExcelData() {
             sheets.load("items");
             await ctx.sync();
             
-            // Read all sheets (limit to first 10 to avoid overwhelming context)
+            // Read sheets based on scope setting
             const allSheetsData = [];
-            const maxSheets = Math.min(sheets.items.length, 10);
+            const shouldReadAllSheets = state.worksheetScope === "all";
             
-            for (let i = 0; i < maxSheets; i++) {
-                const sheet = sheets.items[i];
+            // Get active sheet first
+            const activeSheet = ctx.workbook.worksheets.getActiveWorksheet();
+            activeSheet.load("name");
+            await ctx.sync();
+            
+            // Determine which sheets to read
+            const sheetsToRead = shouldReadAllSheets 
+                ? sheets.items.slice(0, 10) // All sheets (max 10)
+                : [sheets.items.find(s => s.name === activeSheet.name) || sheets.items[0]]; // Just active sheet
+            
+            for (const sheet of sheetsToRead) {
                 try {
                     const usedRange = sheet.getUsedRange();
                     sheet.load("name");
@@ -275,16 +285,13 @@ async function readExcelData() {
             }
             
             // Set current data to active sheet
-            const activeSheet = ctx.workbook.worksheets.getActiveWorksheet();
-            activeSheet.load("name");
-            await ctx.sync();
-            
             const activeSheetData = allSheetsData.find(s => s.sheetName === activeSheet.name);
             state.currentData = activeSheetData || allSheetsData[0] || null;
-            state.allSheetsData = allSheetsData;
+            state.allSheetsData = shouldReadAllSheets ? allSheetsData : [];
             
             if (state.currentData) {
-                infoEl.textContent = `${state.currentData.sheetName}: ${state.currentData.rowCount} rows × ${state.currentData.colCount} cols (${allSheetsData.length} sheets)`;
+                const scopeText = shouldReadAllSheets ? ` (${allSheetsData.length} sheets)` : "";
+                infoEl.textContent = `${state.currentData.sheetName}: ${state.currentData.rowCount} rows × ${state.currentData.colCount} cols${scopeText}`;
             } else {
                 infoEl.textContent = "No data";
             }

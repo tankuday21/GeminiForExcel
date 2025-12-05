@@ -15,7 +15,7 @@
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
                 <span>Copilot</span>
-                <span class="version-badge" id="versionBadge" title="Click to check for updates">v2.8.0</span>
+                <span class="version-badge" id="versionBadge" title="Click to check for updates">v2.8.1</span>
             </div>
             <div class="header-actions">
                 <button class="icon-btn" id="themeBtn" title="Toggle Dark Mode">
@@ -143,18 +143,18 @@
                 <p class="hint">Get your free key at <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a></p>
                 
                 <div class="settings-section">
-                    <label>Mode</label>
+                    <label>Worksheet Scope</label>
                     <div class="mode-toggle">
                         <label class="mode-label">
-                            <input type="radio" name="mode" value="edit" id="modeEdit" checked>
-                            <span>Edit Mode</span>
+                            <input type="radio" name="worksheetScope" value="single" id="scopeSingle" checked>
+                            <span>Active Sheet Only</span>
                         </label>
                         <label class="mode-label">
-                            <input type="radio" name="mode" value="readonly" id="modeReadOnly">
-                            <span>Read-Only Mode</span>
+                            <input type="radio" name="worksheetScope" value="all" id="scopeAll">
+                            <span>All Sheets</span>
                         </label>
                     </div>
-                    <p class="hint">Edit mode allows applying changes. Read-only mode prevents modifications.</p>
+                    <p class="hint">Active Sheet Only: AI sees only the current sheet. All Sheets: AI can access all sheets in the workbook.</p>
                 </div>
                 
                 <div class="settings-section">
