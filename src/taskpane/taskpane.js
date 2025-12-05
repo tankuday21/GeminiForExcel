@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.8.1";
+const VERSION = "2.9.0";
 
 import {
     detectTaskType,
@@ -1703,6 +1703,10 @@ async function executeAction(ctx, sheet, action) {
             createChart(sheet, range, action);
             break;
             
+        case "pivotChart":
+            await createPivotChart(ctx, sheet, range, action);
+            break;
+            
         case "sort":
             applySort(range, data);
             break;
@@ -2083,6 +2087,87 @@ function createChart(sheet, dataRange, action) {
     if (ct.includes("line") || ct.includes("trend")) {
         chart.legend.position = Excel.ChartLegendPosition.bottom;
     }
+}
+
+/**
+ * Creates a pivot chart by aggregating data intelligently
+ */
+async function createPivotChart(ctx, sheet, range, action) {
+    range.load(["values", "rowIndex", "columnIndex", "rowCount"]);
+    await ctx.sync();
+    
+    const values = range.values;
+    const headers = values[0];
+    
+    // Parse options
+    let options = { groupBy: null, aggregate: null, aggregateFunc: "sum", chartType: "column", title: "Pivot Chart", position: "H2" };
+    if (action.data) {
+        try { options = { ...options, ...JSON.parse(action.data) }; } catch (e) {}
+    }
+    if (action.chartType) options.chartType = action.chartType;
+    if (action.title) options.title = action.title;
+    if (action.position) options.position = action.position;
+    
+    // Find columns
+    const groupByIdx = headers.findIndex(h => String(h).toLowerCase() === String(options.groupBy).toLowerCase());
+    const aggregateIdx = options.aggregate ? headers.findIndex(h => String(h).toLowerCase() === String(options.aggregate).toLowerCase()) : -1;
+    
+    if (groupByIdx === -1) throw new Error(`Column "${options.groupBy}" not found`);
+    
+    // Aggregate data
+    const aggregated = {};
+    for (let r = 1; r < values.length; r++) {
+        const key = String(values[r][groupByIdx] || "");
+        if (!key) continue;
+        if (!aggregated[key]) aggregated[key] = { count: 0, sum: 0, values: [] };
+        aggregated[key].count++;
+        if (aggregateIdx !== -1) {
+            const val = parseFloat(values[r][aggregateIdx]);
+            if (!isNaN(val)) {
+                aggregated[key].sum += val;
+                aggregated[key].values.push(val);
+            }
+        }
+    }
+    
+    // Calculate final values
+    const chartData = [];
+    for (const [key, data] of Object.entries(aggregated)) {
+        let value;
+        switch (options.aggregateFunc.toLowerCase()) {
+            case "count": value = data.count; break;
+            case "average": case "avg": value = data.values.length > 0 ? data.sum / data.values.length : 0; break;
+            case "max": value = data.values.length > 0 ? Math.max(...data.values) : 0; break;
+            case "min": value = data.values.length > 0 ? Math.min(...data.values) : 0; break;
+            default: value = data.sum; break;
+        }
+        chartData.push([key, value]);
+    }
+    chartData.sort((a, b) => b[1] - a[1]);
+    
+    // Write aggregated data
+    const chartStartRow = range.rowIndex + range.rowCount + 2;
+    const chartValues = [[options.groupBy || "Category", options.aggregate || "Value"], ...chartData];
+    const chartDataRange = sheet.getRangeByIndexes(chartStartRow, range.columnIndex, chartValues.length, 2);
+    chartDataRange.values = chartValues;
+    await ctx.sync();
+    
+    // Create chart
+    let type = Excel.ChartType.columnClustered;
+    const ct = options.chartType.toLowerCase();
+    if (ct.includes("pie")) type = Excel.ChartType.pie;
+    else if (ct.includes("bar")) type = Excel.ChartType.barClustered;
+    else if (ct.includes("line")) type = Excel.ChartType.line;
+    
+    const chart = sheet.charts.add(type, chartDataRange, Excel.ChartSeriesBy.columns);
+    const position = options.position || "H2";
+    const startCol = position.match(/[A-Z]+/)?.[0] || "H";
+    const startRow = parseInt(position.match(/\d+/)?.[0] || "2");
+    chart.setPosition(position, `${String.fromCharCode(startCol.charCodeAt(0) + 8)}${startRow + 15}`);
+    chart.title.text = options.title;
+    chart.legend.visible = true;
+    chart.legend.position = ct.includes("pie") ? Excel.ChartLegendPosition.right : Excel.ChartLegendPosition.bottom;
+    await ctx.sync();
 }
 
 function applySort(range, data) {
