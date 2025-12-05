@@ -304,6 +304,7 @@ function getCommonRules() {
 - sort: <ACTION type="sort" target="DATARANGE">{"column":1,"ascending":true}</ACTION>
 - filter: <ACTION type="filter" target="DATARANGE">{"column":2,"values":["Mumbai"]}</ACTION>
 - clearFilter: <ACTION type="clearFilter" target="DATARANGE"></ACTION>
+- removeDuplicates: <ACTION type="removeDuplicates" target="DATARANGE">{"columns":[0,1,2]}</ACTION>
 - copy: <ACTION type="copy" target="DESTINATION" source="SOURCE"></ACTION>
 - copyValues: <ACTION type="copyValues" target="DESTINATION" source="SOURCE"></ACTION>
 
@@ -370,6 +371,17 @@ To copy ONLY VALUES (no formulas) - useful for replacing original data with clea
 - source: The range to copy FROM
 - target: The starting cell to paste TO (top-left corner of destination)
 - Use "copyValues" when replacing original data with formula results (e.g., after TRIM, UPPER, etc.)
+
+## REMOVING DUPLICATES
+To remove duplicate rows from a range:
+<ACTION type="removeDuplicates" target="A1:E86">
+{"columns":[0,1,2,3,4]}
+</ACTION>
+
+- target: The data range including headers
+- columns: Array of 0-based column indices to check for duplicates (e.g., [0,1,2] checks first 3 columns)
+- Keeps the first occurrence of each unique row
+- Removes all subsequent duplicates
 
 ## CREATING SHEETS
 To create a new sheet:

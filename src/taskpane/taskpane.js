@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.6.4";
+const VERSION = "2.7.0";
 
 import {
     detectTaskType,
@@ -1671,6 +1671,10 @@ async function executeAction(ctx, sheet, action) {
             await clearFilter(ctx, sheet);
             break;
             
+        case "removeDuplicates":
+            await removeDuplicates(ctx, range, data);
+            break;
+            
         default:
             if (data) range.values = [[data]];
     }
@@ -2090,6 +2094,67 @@ async function clearFilter(ctx, sheet) {
         await ctx.sync();
     } catch (e) {
         // No filter to clear, ignore
+    }
+}
+
+/**
+ * Removes duplicate rows from a range
+ * @param {Object} ctx - Excel context
+ * @param {Object} range - Excel range
+ * @param {string} data - JSON string with columns array
+ */
+async function removeDuplicates(ctx, range, data) {
+    // Load the range data
+    range.load(["values", "rowCount", "columnCount"]);
+    await ctx.sync();
+    
+    const values = range.values;
+    const rowCount = range.rowCount;
+    const colCount = range.columnCount;
+    
+    // Parse options (which columns to check for duplicates)
+    let options = { columns: [] };
+    if (data) {
+        try {
+            options = JSON.parse(data);
+        } catch (e) {
+            // Default to all columns
+            options.columns = Array.from({ length: colCount }, (_, i) => i);
+        }
+    }
+    
+    // If no columns specified, use all columns
+    if (!options.columns || options.columns.length === 0) {
+        options.columns = Array.from({ length: colCount }, (_, i) => i);
+    }
+    
+    // Find unique rows (keep first occurrence)
+    const seen = new Set();
+    const uniqueRows = [];
+    
+    for (let r = 0; r < rowCount; r++) {
+        const row = values[r];
+        
+        // Create a key from the specified columns
+        const key = options.columns.map(colIdx => {
+            const val = row[colIdx];
+            return val === null || val === undefined ? "" : String(val);
+        }).join("|");
+        
+        if (!seen.has(key)) {
+            seen.add(key);
+            uniqueRows.push(row);
+        }
+    }
+    
+    // Clear the original range
+    range.clear(Excel.ClearApplyTo.contents);
+    await ctx.sync();
+    
+    // Write back only unique rows
+    if (uniqueRows.length > 0) {
+        const newRange = range.getResizedRange(uniqueRows.length - 1, colCount - 1);
+        newRange.values = uniqueRows;
     }
 }
 
