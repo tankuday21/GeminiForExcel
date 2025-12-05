@@ -99,30 +99,36 @@ const TASK_PROMPTS = {
 4. Use structured references when working with tables
 5. Consider performance for large datasets
 
-## CRITICAL: UNIQUE FUNCTION WITH DYNAMIC ARRAYS
-When using UNIQUE() function with companion formulas (like COUNTIF):
-- UNIQUE returns a dynamic array that spills to multiple cells automatically
-- **ONLY apply the companion formula to the FIRST cell** (e.g., F2)
-- **DO NOT specify a range** (e.g., F2:F65) - Excel will auto-fill based on UNIQUE's output
-- The companion formula will automatically spill down to match UNIQUE's results
+## CRITICAL: UNIQUE VALUES AND COUNTS - RELIABLE APPROACH
+When user asks for "unique values and their counts" (e.g., unique departments with employee counts):
 
-**WRONG** (causes dimension mismatch):
-<ACTION type="formula" target="E2">
-=UNIQUE(C2:C65)
-</ACTION>
-<ACTION type="formula" target="F2:F65">
-=COUNTIF($C:$C, E2)
+**BEST APPROACH - Use removeDuplicates + COUNTIF:**
+
+Step 1: Copy the source data to the target column
+<ACTION type="copy" source="C2:C51" target="E2">
 </ACTION>
 
-**RIGHT** (works perfectly):
-<ACTION type="formula" target="E2">
-=UNIQUE(C2:C65)
+Step 2: Remove duplicates from the copied data
+<ACTION type="removeDuplicates" target="E2:E51">
+{"columns": [0]}
 </ACTION>
+
+Step 3: Add COUNTIF formula in adjacent column (only first cell)
 <ACTION type="formula" target="F2">
 =COUNTIF($C:$C, E2)
 </ACTION>
 
-The F2 formula will automatically copy down to match however many unique values exist!
+Step 4: Use autofill to copy the formula down
+<ACTION type="autofill" source="F2" target="F2:F20">
+</ACTION>
+
+This approach:
+- ✅ Works in all Excel versions
+- ✅ No spill errors
+- ✅ No dimension mismatch
+- ✅ Reliable and predictable
+
+**DO NOT use UNIQUE() function** - it causes spill errors and compatibility issues!
 
 ## CRITICAL: DATA CLEANING IN-PLACE
 **NEVER apply formulas to the same column they reference (causes circular reference)!**
