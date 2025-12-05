@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.5.0";
+const VERSION = "2.5.1";
 
 import {
     detectTaskType,
@@ -1700,9 +1700,14 @@ async function applyFormula(range, formula) {
         for (let c = 0; c < cols; c++) {
             let f = formula;
             if (r > 0) {
-                f = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (m, d1, col, d2, row) => {
-                    if (d2 === "$") return m;
-                    return `${d1}${col}${d2}${parseInt(row) + r}`;
+                // Adjust cell references for each row
+                // Match pattern: optional$, column letters, optional$, row number
+                f = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (match, colAbs, col, rowAbs, row) => {
+                    // If row has $ before it (absolute reference), don't adjust
+                    if (rowAbs === "$") return match;
+                    // Otherwise, increment the row number
+                    const newRow = parseInt(row) + r;
+                    return `${colAbs}${col}${rowAbs}${newRow}`;
                 });
             }
             rowFormulas.push(f);
