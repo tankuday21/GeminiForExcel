@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.9.4";
+const VERSION = "2.9.5";
 
 import {
     detectTaskType,
@@ -1836,61 +1836,99 @@ async function applyFormula(range, formula) {
         return;
     }
     
-    // For multi-row ranges, try autofill first, fallback to manual if it fails
-    if (rows > 1) {
+    // For multi-row, single-column ranges, use autofill approach
+    if (rows > 1 && cols === 1) {
         try {
             // Set formula in first cell only
             const firstCell = range.getCell(0, 0);
             firstCell.formulas = [[formula]];
             
-            // Use autofill to copy down (Excel handles this efficiently)
-            firstCell.autoFill(range, Excel.AutoFillType.fillDefault);
-            return;
+            // Try autofill first (most efficient)
+            try {
+                firstCell.autoFill(range, Excel.AutoFillType.fillDefault);
+                return;
+            } catch (autofillError) {
+                // Autofill failed, use manual array method
+                console.warn("Autofill failed, using formula array:", autofillError);
+                
+                // Build formula array manually
+                const formulas = [];
+                for (let r = 0; r < rows; r++) {
+                    let f = formula;
+                    if (r > 0) {
+                        // Adjust row numbers in cell references (but not absolute references)
+                        f = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (match, colAbs, col, rowAbs, row) => {
+                            if (rowAbs === "$") return match; // Skip absolute row references
+                            const newRow = parseInt(row) + r;
+                            return `${colAbs}${col}${rowAbs}${newRow}`;
+                        });
+                    }
+                    formulas.push([f]);
+                }
+                
+                // Apply all formulas at once
+                range.formulas = formulas;
+                return;
+            }
         } catch (e) {
-            // Autofill failed, fall through to manual method
-            console.warn("Autofill failed, using manual formula array:", e);
+            throw new Error(`Formula application failed: ${e.message}`);
         }
     }
     
-    // Manual method: build formula array for multi-row ranges
-    if (rows > 1 && cols === 1) {
-        const formulas = [];
-        for (let r = 0; r < rows; r++) {
+    // For single-row, multi-column ranges, build the formula array
+    if (rows === 1 && cols > 1) {
+        const formulas = [[]];
+        for (let c = 0; c < cols; c++) {
             let f = formula;
-            if (r > 0) {
-                // Adjust row numbers in cell references
+            if (c > 0) {
+                // Adjust cell references for each column
                 f = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (match, colAbs, col, rowAbs, row) => {
-                    if (rowAbs === "$") return match;
-                    const newRow = parseInt(row) + r;
-                    return `${colAbs}${col}${rowAbs}${newRow}`;
+                    if (colAbs === "$") return match; // Skip absolute column references
+                    const colCode = col.charCodeAt(0);
+                    const newCol = String.fromCharCode(colCode + c);
+                    return `${colAbs}${newCol}${rowAbs}${row}`;
                 });
             }
-            formulas.push([f]);
+            formulas[0].push(f);
         }
         range.formulas = formulas;
         return;
     }
     
-    // For single-row, multi-column ranges, build the formula array
-    const formulas = [[]];
-    for (let c = 0; c < cols; c++) {
-        let f = formula;
-        if (c > 0) {
-            // Adjust cell references for each column
-            // Match pattern: optional$, column letters, optional$, row number
-            f = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (match, colAbs, col, rowAbs, row) => {
-                // If column has $ before it (absolute reference), don't adjust
-                if (colAbs === "$") return match;
-                // Otherwise, increment the column letter
-                const colCode = col.charCodeAt(0);
-                const newCol = String.fromCharCode(colCode + c);
-                return `${colAbs}${newCol}${rowAbs}${row}`;
-            });
+    // For multi-row, multi-column ranges, build 2D formula array
+    if (rows > 1 && cols > 1) {
+        const formulas = [];
+        for (let r = 0; r < rows; r++) {
+            const rowFormulas = [];
+            for (let c = 0; c < cols; c++) {
+                let f = formula;
+                // Adjust both row and column references
+                if (r > 0 || c > 0) {
+                    f = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (match, colAbs, col, rowAbs, row) => {
+                        let newCol = col;
+                        let newRow = parseInt(row);
+                        
+                        // Adjust column if not absolute
+                        if (colAbs !== "$" && c > 0) {
+                            const colCode = col.charCodeAt(0);
+                            newCol = String.fromCharCode(colCode + c);
+                        }
+                        
+                        // Adjust row if not absolute
+                        if (rowAbs !== "$" && r > 0) {
+                            newRow = newRow + r;
+                        }
+                        
+                        return `${colAbs}${newCol}${rowAbs}${newRow}`;
+                    });
+                }
+                rowFormulas.push(f);
+            }
+            formulas.push(rowFormulas);
         }
-        formulas[0].push(f);
+        range.formulas = formulas;
+        return;
     }
-    
-    range.formulas = formulas;
 }
 
 function applyValues(range, data) {
