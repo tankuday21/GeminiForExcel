@@ -276,17 +276,29 @@ function getCommonRules() {
 - copy: <ACTION type="copy" target="DESTINATION" source="SOURCE"></ACTION>
 
 ## CONDITIONAL FORMATTING
-To highlight cells based on conditions:
+**CRITICAL: For multiple conditions on the same range, use a SINGLE ACTION with an ARRAY of rules!**
+
+Single condition:
 <ACTION type="conditionalFormat" target="C2:C51">
 {"type":"cellValue","operator":"GreaterThan","value":"40","fill":"#FFFF00"}
+</ACTION>
+
+**Multiple conditions (CORRECT WAY - use array):**
+<ACTION type="conditionalFormat" target="E2:E51">
+[
+  {"type":"cellValue","operator":"GreaterThan","value":"70","fill":"#00FF00"},
+  {"type":"cellValue","operator":"Between","value":"40","value2":"70","fill":"#FFFF00"},
+  {"type":"cellValue","operator":"LessThan","value":"40","fill":"#FF0000"}
+]
 </ACTION>
 
 To REMOVE/CLEAR conditional formatting:
 <ACTION type="clearFormat" target="C2:C51">
 </ACTION>
 
-Operators: "GreaterThan", "LessThan", "EqualTo", "NotEqualTo", "GreaterThanOrEqual", "LessThanOrEqual"
+Operators: "GreaterThan", "LessThan", "EqualTo", "NotEqualTo", "GreaterThanOrEqual", "LessThanOrEqual", "Between"
 Colors: Use hex codes like "#FFFF00" (yellow), "#FF0000" (red), "#00FF00" (green)
+**Note:** For "Between" operator, use both "value" and "value2" properties
 
 ## SORTING DATA
 To sort data, use the sort action type (NOT formulas like SORT()):
