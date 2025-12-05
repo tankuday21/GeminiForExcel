@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.7.1";
+const VERSION = "2.7.2";
 
 import {
     detectTaskType,
@@ -2104,13 +2104,14 @@ async function clearFilter(ctx, sheet) {
  * @param {string} data - JSON string with columns array
  */
 async function removeDuplicates(ctx, range, data) {
-    // Load the range data
-    range.load(["values", "rowCount", "columnCount"]);
+    // Load the range data and address
+    range.load(["values", "rowCount", "columnCount", "address"]);
     await ctx.sync();
     
     const values = range.values;
     const rowCount = range.rowCount;
     const colCount = range.columnCount;
+    const rangeAddress = range.address;
     
     // Parse options (which columns to check for duplicates)
     let options = { columns: [] };
@@ -2155,7 +2156,7 @@ async function removeDuplicates(ctx, range, data) {
     if (uniqueRows.length > 0) {
         // Get the sheet and create a new range reference from the original address
         const sheet = range.worksheet;
-        const address = range.address.split("!")[1] || range.address; // Remove sheet name if present
+        const address = rangeAddress.split("!")[1] || rangeAddress; // Remove sheet name if present
         const startCell = address.split(":")[0]; // Get starting cell (e.g., "A1")
         
         // Create a new range from the start cell
