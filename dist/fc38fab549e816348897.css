@@ -1582,3 +1582,283 @@ body {
 .mode-icon-sm.active svg {
     stroke: #fff;
 }
+
+/* ============================================================================
+   Preview Panel
+   ============================================================================ */
+.preview-panel {
+    background: var(--bg-alt);
+    border-top: 1px solid var(--border);
+    padding: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.preview-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.preview-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.preview-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.preview-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--primary);
+}
+
+.preview-item.expanded {
+    background: var(--bg-hover);
+}
+
+.preview-checkbox {
+    margin-top: 2px;
+}
+
+.preview-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.preview-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.preview-summary {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 500;
+}
+
+.preview-target {
+    font-size: 11px;
+    color: var(--text-3);
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.preview-details {
+    margin-top: 6px;
+    padding: 6px;
+    background: var(--bg-alt);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--text-2);
+    font-family: 'Consolas', 'Monaco', monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* ============================================================================
+   History Panel
+   ============================================================================ */
+.history-panel {
+    background: var(--bg-alt);
+    border-top: 1px solid var(--border);
+    padding: 12px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.history-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.history-entry {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: all 0.15s;
+}
+
+.history-entry:hover {
+    background: var(--bg-hover);
+    border-color: var(--primary);
+}
+
+.history-icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+    background: var(--bg-alt);
+    border-radius: 6px;
+}
+
+.history-icon.formula {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.history-icon.values {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.history-icon.format {
+    background: #fff3e0;
+    color: #f57c00;
+}
+
+.history-icon.chart {
+    background: #e8f5e9;
+    color: #388e3c;
+}
+
+.history-icon.validation {
+    background: #fce4ec;
+    color: #c2185b;
+}
+
+.history-icon.sort {
+    background: #e0f2f1;
+    color: #00796b;
+}
+
+[data-theme="dark"] .history-icon.formula {
+    background: rgba(25, 118, 210, 0.2);
+    color: #64b5f6;
+}
+
+[data-theme="dark"] .history-icon.values {
+    background: rgba(123, 31, 162, 0.2);
+    color: #ba68c8;
+}
+
+[data-theme="dark"] .history-icon.format {
+    background: rgba(245, 124, 0, 0.2);
+    color: #ffb74d;
+}
+
+[data-theme="dark"] .history-icon.chart {
+    background: rgba(56, 142, 60, 0.2);
+    color: #81c784;
+}
+
+[data-theme="dark"] .history-icon.validation {
+    background: rgba(194, 24, 91, 0.2);
+    color: #f06292;
+}
+
+[data-theme="dark"] .history-icon.sort {
+    background: rgba(0, 121, 107, 0.2);
+    color: #4db6ac;
+}
+
+.history-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.history-label {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 500;
+}
+
+.history-target {
+    font-size: 11px;
+    color: var(--text-3);
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.history-time {
+    font-size: 11px;
+    color: var(--text-3);
+    flex-shrink: 0;
+}
+
+.history-empty {
+    text-align: center;
+    padding: 24px;
+    color: var(--text-3);
+    font-size: 13px;
+}
+
+/* Undo Button */
+.undo-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.undo-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.undo-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--primary);
+}
+
+.undo-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}

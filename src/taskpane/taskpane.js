@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.3.1";
+const VERSION = "2.4.0";
 
 import {
     detectTaskType,
@@ -1737,23 +1737,43 @@ async function applyFormat(ctx, range, data) {
 
 /**
  * Applies conditional formatting to a range
+ * Supports multiple rules in a single action
  */
 async function applyConditionalFormat(ctx, range, data) {
-    let rule;
-    try { rule = JSON.parse(data); } catch { rule = {}; }
+    let rules;
+    try { 
+        const parsed = JSON.parse(data);
+        // Support both single rule and array of rules
+        rules = Array.isArray(parsed) ? parsed : [parsed];
+    } catch { 
+        rules = []; 
+    }
     
-    // Clear existing conditional formats
+    // Clear existing conditional formats only once
     range.conditionalFormats.clearAll();
     await ctx.sync();
     
-    // Add conditional format based on rule type
-    if (rule.type === "cellValue" && rule.operator && rule.value) {
-        const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
-        cf.cellValue.format.fill.color = rule.fill || "#FFFF00";
-        cf.cellValue.rule = {
-            formula1: String(rule.value),
-            operator: rule.operator // "GreaterThan", "LessThan", "EqualTo", etc.
-        };
+    // Add each conditional format rule
+    for (const rule of rules) {
+        if (rule.type === "cellValue" && rule.operator && rule.value) {
+            const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
+            cf.cellValue.format.fill.color = rule.fill || "#FFFF00";
+            
+            // Handle different operators
+            let operator = rule.operator;
+            if (operator === "GreaterThan") operator = Excel.ConditionalCellValueOperator.greaterThan;
+            else if (operator === "LessThan") operator = Excel.ConditionalCellValueOperator.lessThan;
+            else if (operator === "EqualTo") operator = Excel.ConditionalCellValueOperator.equalTo;
+            else if (operator === "GreaterThanOrEqual") operator = Excel.ConditionalCellValueOperator.greaterThanOrEqual;
+            else if (operator === "LessThanOrEqual") operator = Excel.ConditionalCellValueOperator.lessThanOrEqual;
+            else if (operator === "Between") operator = Excel.ConditionalCellValueOperator.between;
+            
+            cf.cellValue.rule = {
+                formula1: String(rule.value),
+                formula2: rule.value2 ? String(rule.value2) : undefined,
+                operator: operator
+            };
+        }
     }
 }
 
