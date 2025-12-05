@@ -103,16 +103,19 @@ const TASK_PROMPTS = {
 
 When cleaning data (TRIM, UPPER, LOWER, etc.):
 - **WRONG**: Apply =TRIM(C2) to C2 (circular reference!)
-- **RIGHT**: Apply =TRIM(C2) to a NEW column (like H2), then tell user to copy values back
+- **RIGHT**: Apply =TRIM(C2) to a NEW column (like H2), then use copyValues to replace
 
 Example for "Clean Name column":
+Step 1 - Create formulas in helper column:
 <ACTION type="formula" target="H2:H51">
 =TRIM(C2)
 </ACTION>
 
-Then explain: "I've created cleaned values in column H. To replace the original:
-1. Copy column H
-2. Right-click column C → Paste Special → Values"
+Step 2 - If user asks to "replace" or "update original":
+<ACTION type="copyValues" target="C2" source="H2:H51">
+</ACTION>
+
+Then explain: "I've replaced the original values with the cleaned data."
 
 ## OUTPUT FORMAT
 Always provide formulas in ACTION tags:
@@ -228,7 +231,15 @@ The source should be the range containing the list values.`,
 - Data transformation
 - Autofill sequences
 
-## OUTPUT FORMAT
+## REPLACING FORMULA RESULTS WITH VALUES
+If user asks to "replace original with updated values" or "copy values back":
+Use copyValues action (NOT values action):
+<ACTION type="copyValues" target="A2" source="F2:F51">
+</ACTION>
+
+This copies only the calculated values (not formulas) from source to target.
+
+## OUTPUT FORMAT FOR NEW DATA
 <ACTION type="values" target="RANGE">
 [["value1","value2"],["value3","value4"]]
 </ACTION>

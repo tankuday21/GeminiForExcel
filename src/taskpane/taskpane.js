@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "2.6.1";
+const VERSION = "2.6.2";
 
 import {
     detectTaskType,
