@@ -511,7 +511,19 @@ Values should be a 2D array matching the target range dimensions.`,
 {"slicerName":"RegionSlicer","sourceType":"table","sourceName":"SalesData","field":"Region","position":{"left":500,"top":100,"width":200,"height":200},"style":"SlicerStyleLight3"}
 </ACTION>
 
+**Add Slicer with Pre-selected Filter Items:**
+<ACTION type="createSlicer" target="SalesData">
+{"slicerName":"CategorySlicer","sourceType":"table","sourceName":"SalesData","field":"Category","position":{"left":720,"top":100,"width":200,"height":200},"style":"SlicerStyleLight3","selectedItems":["Electronics","Furniture"],"multiSelect":true}
+</ACTION>
+
+**Configure Slicer Selection:**
+<ACTION type="configureSlicer" target="RegionSlicer">
+{"selectedItems":["North","South"],"multiSelect":true}
+</ACTION>
+
 Available table styles: TableStyleLight1-21, TableStyleMedium1-28, TableStyleDark1-11
+**Slicer Selection:** Use "selectedItems" array to filter data; "multiSelect":false for single-item selection only
+**Field Validation:** The field must exist as a column in the table; an error is thrown with available columns if not found
 
 Explain what the table operation does and why it benefits the user's workflow.`,
 
@@ -579,8 +591,24 @@ You can execute PivotTable operations directly through ACTION tags. Always expla
 {"slicerName":"YearSlicer","sourceType":"pivot","sourceName":"SalesPivot","field":"Year","position":{"left":600,"top":50,"width":150,"height":250},"style":"SlicerStyleDark2"}
 </ACTION>
 
+**Add Slicer with Pre-selected Items:**
+<ACTION type="createSlicer" target="SalesPivot">
+{"slicerName":"RegionSlicer","sourceType":"pivot","sourceName":"SalesPivot","field":"Region","position":{"left":800,"top":50,"width":150,"height":250},"style":"SlicerStyleLight3","selectedItems":["North","South"],"multiSelect":true}
+</ACTION>
+
+**Configure Slicer Selection (filter to specific items):**
+<ACTION type="configureSlicer" target="YearSlicer">
+{"selectedItems":["2023","2024"],"multiSelect":true}
+</ACTION>
+
+**Configure Slicer for Single Selection Only:**
+<ACTION type="configureSlicer" target="RegionSlicer">
+{"selectedItems":["North"],"multiSelect":false}
+</ACTION>
+
 Available aggregation functions: Sum, Count, Average, Max, Min, CountNumbers, StdDev, Var
 Available layouts: Compact (default), Outline, Tabular
+**Slicer Selection:** Use "selectedItems" to pre-filter data; "multiSelect":false restricts to single item selection
 
 ## COMMON PIVOTTABLE SCENARIOS
 
@@ -1046,17 +1074,20 @@ Example: Create a sheet named "Summary":
 **Multi-step workflow:** 1) createPivotTable, 2) addPivotField for each dimension/value, 3) configurePivotLayout (optional)
 
 ## SLICER OPERATIONS
-- createSlicer: <ACTION type="createSlicer" target="SOURCENAME">{"slicerName":"NAME","sourceType":"table|pivot","sourceName":"NAME","field":"FIELDNAME","position":{"left":500,"top":100,"width":200,"height":200},"style":"SlicerStyleLight1"}</ACTION>
-- configureSlicer: <ACTION type="configureSlicer" target="SLICERNAME">{"caption":"CAPTION","style":"SlicerStyleDark3","sortBy":"Ascending","width":250,"height":300}</ACTION>
+- createSlicer: <ACTION type="createSlicer" target="SOURCENAME">{"slicerName":"NAME","sourceType":"table|pivot","sourceName":"NAME","field":"FIELDNAME","position":{"left":500,"top":100,"width":200,"height":200},"style":"SlicerStyleLight1","selectedItems":["Item1","Item2"],"multiSelect":true}</ACTION>
+- configureSlicer: <ACTION type="configureSlicer" target="SLICERNAME">{"caption":"CAPTION","style":"SlicerStyleDark3","sortBy":"Ascending","width":250,"height":300,"selectedItems":["Item1","Item2"],"multiSelect":true}</ACTION>
 - connectSlicerToTable: <ACTION type="connectSlicerToTable" target="SLICERNAME">{"tableName":"TABLENAME","field":"FIELDNAME"}</ACTION>
 - connectSlicerToPivot: <ACTION type="connectSlicerToPivot" target="SLICERNAME">{"pivotName":"PIVOTNAME","field":"FIELDNAME"}</ACTION>
 - deleteSlicer: <ACTION type="deleteSlicer" target="SLICERNAME"></ACTION>
 
-**Slicer Creation:** sourceType must be "table" or "pivot"; field must exist in source columns/hierarchies
+**Slicer Creation:** sourceType must be "table" or "pivot"; field must exist in source columns/hierarchies (validated before creation)
 **Slicer Positioning:** left/top/width/height in points (default: 200x200 at 100,100); position to avoid overlap
 **Slicer Styles:** 12 styles available - SlicerStyleLight1-6, SlicerStyleDark1-6
 **Slicer Sorting:** DataSourceOrder (default), Ascending, Descending
-**Multi-step workflow:** 1) Create table/pivot, 2) createSlicer for each filter dimension, 3) configureSlicer for styling/layout
+**Slicer Selection:** Use "selectedItems" array to pre-select specific items; set "multiSelect":false to allow only single selection
+**Field Validation:** The field name must match an existing column (for tables) or hierarchy (for pivots); an error is thrown if not found
+**Table/Pivot Search:** Tables and PivotTables are searched across all worksheets, not just the active sheet
+**Multi-step workflow:** 1) Create table/pivot, 2) createSlicer for each filter dimension, 3) configureSlicer for styling/layout/selection
 **Note:** Slicers are bound to source at creation; reconnecting requires deletion and recreation
 
 ## ADVANCED ACTIONS (executor support pending)

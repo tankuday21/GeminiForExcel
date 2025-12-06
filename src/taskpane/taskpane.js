@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "3.5.2";
+const VERSION = "3.5.3";
 
 import {
     detectTaskType,
@@ -4231,7 +4231,9 @@ async function createSlicer(ctx, sheet, action) {
         sourceName: action.target,
         field: null,
         position: { left: 100, top: 100, width: 200, height: 200 },
-        style: "SlicerStyleLight1"
+        style: "SlicerStyleLight1",
+        selectedItems: null,  // Array of items to select
+        multiSelect: true     // Whether multiple items can be selected
     };
     
     if (action.data) {
@@ -4271,19 +4273,50 @@ async function createSlicer(ctx, sheet, action) {
         const sourceType = options.sourceType.toLowerCase();
         
         if (sourceType === "table") {
-            // Get table from current sheet
-            const table = sheet.tables.getItemOrNullObject(options.sourceName);
-            table.load("isNullObject");
+            // Search for table in all worksheets (Comment 4: align with pivot search behavior)
+            const sheets = ctx.workbook.worksheets;
+            sheets.load("items");
             await ctx.sync();
             
-            if (table.isNullObject) {
-                const errorMsg = `Table "${options.sourceName}" not found on active sheet.`;
+            let table = null;
+            for (const ws of sheets.items) {
+                const tbl = ws.tables.getItemOrNullObject(options.sourceName);
+                tbl.load("isNullObject");
+                await ctx.sync();
+                
+                if (!tbl.isNullObject) {
+                    table = tbl;
+                    targetWorksheet = ws;
+                    break;
+                }
+            }
+            
+            if (!table) {
+                const errorMsg = `Table "${options.sourceName}" not found in any worksheet.`;
+                logError(errorMsg);
+                throw new Error(errorMsg);
+            }
+            
+            // Comment 2: Validate that the field exists in the table
+            table.columns.load("items");
+            await ctx.sync();
+            
+            const columnNames = table.columns.items.map(col => {
+                col.load("name");
+                return col;
+            });
+            await ctx.sync();
+            
+            const fieldExists = columnNames.some(col => col.name === options.field);
+            if (!fieldExists) {
+                const availableColumns = columnNames.map(col => col.name).join(", ");
+                const errorMsg = `Field "${options.field}" not found in table "${options.sourceName}". Available columns: ${availableColumns}`;
                 logError(errorMsg);
                 throw new Error(errorMsg);
             }
             
             slicerSource = table;
-            logDebug(`Found table "${options.sourceName}" for slicer`);
+            logDebug(`Found table "${options.sourceName}" for slicer with valid field "${options.field}"`);
         } else if (sourceType === "pivot") {
             // Search for PivotTable in all sheets
             const sheets = ctx.workbook.worksheets;
@@ -4311,8 +4344,26 @@ async function createSlicer(ctx, sheet, action) {
                 throw new Error(errorMsg);
             }
             
+            // Comment 2: Validate that the field exists in the pivot table hierarchies
+            pivotTable.hierarchies.load("items");
+            await ctx.sync();
+            
+            const hierarchyNames = pivotTable.hierarchies.items.map(h => {
+                h.load("name");
+                return h;
+            });
+            await ctx.sync();
+            
+            const fieldExists = hierarchyNames.some(h => h.name === options.field);
+            if (!fieldExists) {
+                const availableFields = hierarchyNames.map(h => h.name).join(", ");
+                const errorMsg = `Field "${options.field}" not found in PivotTable "${options.sourceName}". Available fields: ${availableFields}`;
+                logError(errorMsg);
+                throw new Error(errorMsg);
+            }
+            
             slicerSource = pivotTable;
-            logDebug(`Found PivotTable "${options.sourceName}" for slicer`);
+            logDebug(`Found PivotTable "${options.sourceName}" for slicer with valid field "${options.field}"`);
         }
         
         // Create the slicer
@@ -4341,6 +4392,31 @@ async function createSlicer(ctx, sheet, action) {
         
         await ctx.sync();
         
+        // Comment 1: Configure slicer item selections if specified
+        if (options.selectedItems && Array.isArray(options.selectedItems) && options.selectedItems.length > 0) {
+            slicer.slicerItems.load("items");
+            await ctx.sync();
+            
+            const slicerItems = slicer.slicerItems.items;
+            for (const item of slicerItems) {
+                item.load("name");
+            }
+            await ctx.sync();
+            
+            // If multiSelect is false, only select the first item from selectedItems
+            const itemsToSelect = options.multiSelect === false 
+                ? [options.selectedItems[0]] 
+                : options.selectedItems;
+            
+            for (const item of slicerItems) {
+                const shouldBeSelected = itemsToSelect.includes(item.name);
+                item.isSelected = shouldBeSelected;
+            }
+            
+            await ctx.sync();
+            logDebug(`Configured slicer selections: ${itemsToSelect.join(", ")}`);
+        }
+        
         const slicerDisplayName = options.slicerName || options.field;
         logInfo(`Successfully created slicer "${slicerDisplayName}" for ${sourceType} "${options.sourceName}" on field "${options.field}"`);
     } catch (e) {
@@ -4367,7 +4443,9 @@ async function configureSlicer(ctx, sheet, action) {
         width: null,
         height: null,
         left: null,
-        top: null
+        top: null,
+        selectedItems: null,  // Comment 1: Array of items to select
+        multiSelect: true     // Comment 1: Whether multiple items can be selected
     };
     
     if (action.data) {
@@ -4466,6 +4544,33 @@ async function configureSlicer(ctx, sheet, action) {
         }
         
         await ctx.sync();
+        
+        // Comment 1: Configure slicer item selections if specified
+        if (options.selectedItems && Array.isArray(options.selectedItems) && options.selectedItems.length > 0) {
+            slicer.slicerItems.load("items");
+            await ctx.sync();
+            
+            const slicerItems = slicer.slicerItems.items;
+            for (const item of slicerItems) {
+                item.load("name");
+            }
+            await ctx.sync();
+            
+            // If multiSelect is false, only select the first item from selectedItems
+            const itemsToSelect = options.multiSelect === false 
+                ? [options.selectedItems[0]] 
+                : options.selectedItems;
+            
+            for (const item of slicerItems) {
+                const shouldBeSelected = itemsToSelect.includes(item.name);
+                item.isSelected = shouldBeSelected;
+            }
+            
+            await ctx.sync();
+            updatedProps.push(`selectedItems(${itemsToSelect.length})`);
+            logDebug(`Configured slicer selections: ${itemsToSelect.join(", ")}`);
+        }
+        
         logInfo(`Successfully configured slicer "${slicerName}". Updated: ${updatedProps.join(", ") || "none"}`);
     } catch (e) {
         const errorMsg = `Failed to configure slicer: ${e.message}`;
@@ -4563,19 +4668,30 @@ async function connectSlicerToTable(ctx, sheet, action) {
         await ctx.sync();
         logDebug(`Deleted existing slicer "${slicerName}" for reconnection`);
         
-        // Get the table
-        const table = sheet.tables.getItemOrNullObject(options.tableName);
-        table.load("isNullObject");
-        await ctx.sync();
+        // Comment 3: Search for table in all worksheets instead of just active sheet
+        let table = null;
+        let tableWorksheet = slicerWorksheet; // Default to original slicer's worksheet
         
-        if (table.isNullObject) {
-            const errorMsg = `Table "${options.tableName}" not found.`;
+        for (const ws of sheets.items) {
+            const tbl = ws.tables.getItemOrNullObject(options.tableName);
+            tbl.load("isNullObject");
+            await ctx.sync();
+            
+            if (!tbl.isNullObject) {
+                table = tbl;
+                tableWorksheet = ws;
+                break;
+            }
+        }
+        
+        if (!table) {
+            const errorMsg = `Table "${options.tableName}" not found in any worksheet.`;
             logError(errorMsg);
             throw new Error(errorMsg);
         }
         
-        // Create new slicer with same properties
-        const newSlicer = sheet.slicers.add(table, options.field, sheet);
+        // Create new slicer on the table's worksheet (Comment 3: use correct worksheet)
+        const newSlicer = tableWorksheet.slicers.add(table, options.field, tableWorksheet);
         newSlicer.name = slicerName;
         newSlicer.left = slicerProps.left;
         newSlicer.top = slicerProps.top;
