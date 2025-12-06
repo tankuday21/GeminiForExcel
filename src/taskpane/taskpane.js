@@ -717,8 +717,8 @@ async function checkForUpdates() {
         const response = await fetch(`https://tankuday21.github.io/GeminiForExcel/taskpane.js?t=${Date.now()}`);
         const code = await response.text();
         
-        // Extract version from the deployed code
-        const versionMatch = code.match(/const VERSION = "([^"]+)"/);
+        // Extract version from the deployed code (handles both minified pe="x.x.x" and source const VERSION = "x.x.x")
+        const versionMatch = code.match(/(?:pe="|const VERSION\s*=\s*")(\d+\.\d+\.\d+)"/);
         
         if (versionMatch) {
             const deployedVersion = versionMatch[1];
@@ -771,8 +771,8 @@ async function checkForUpdatesInSettings() {
         const response = await fetch(`https://tankuday21.github.io/GeminiForExcel/taskpane.js?t=${Date.now()}`);
         const code = await response.text();
         
-        // Extract version from the deployed code
-        const versionMatch = code.match(/const VERSION = "([^"]+)"/);
+        // Extract version from the deployed code (handles both minified pe="x.x.x" and source const VERSION = "x.x.x")
+        const versionMatch = code.match(/(?:pe="|const VERSION\s*=\s*")(\d+\.\d+\.\d+)"/);
         
         if (versionMatch) {
             const deployedVersion = versionMatch[1];
