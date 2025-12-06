@@ -46,7 +46,8 @@ const TASK_KEYWORDS = {
         "total", "add up", "multiply", "divide", "percentage", "sumif", "countif",
         "index", "match", "concatenate", "lookup", "function",
         "clean", "trim", "upper", "lower", "remove spaces", "text manipulation",
-        "convert", "proper case", "title case", "capitalize"
+        "convert", "proper case", "title case", "capitalize",
+        "named range", "name range", "define name", "create name", "range name"
     ],
     [TASK_TYPES.CHART]: [
         "chart", "graph", "visualize", "plot", "pie", "bar", "line", "column",
@@ -242,6 +243,9 @@ const TASK_PROMPTS = {
 5. Consider performance for large datasets
 6. When working with tables, use structured references: =TableName[@Column] for current row, =TableName[Column] for entire column
 7. Format formula results appropriately (e.g., currency format for financial calculations, percentage format for ratios)
+8. Use named ranges for frequently referenced cells/ranges (e.g., =SUM(SalesData) instead of =SUM(A2:A100))
+9. Create descriptive named ranges for constants (e.g., TaxRate, CommissionRate) to make formulas self-documenting
+10. Prefer workbook-scoped names for global constants, worksheet-scoped for sheet-specific ranges
 
 ## CRITICAL: UNIQUE VALUES AND COUNTS - RELIABLE APPROACH
 When user asks for "unique values and their counts" (e.g., unique departments with employee counts):
@@ -292,6 +296,29 @@ Step 2 - Copy values back to original column:
 </ACTION>
 
 **ALWAYS use both steps for data cleaning/conversion!**
+
+## NAMED RANGES FOR FORMULA CLARITY
+When formulas reference the same range multiple times or use important constants, suggest creating named ranges:
+
+**Example: Instead of repeating range references:**
+WRONG: =SUMIF(C2:C51,"Sales",E2:E51) + COUNTIF(C2:C51,"Sales")
+RIGHT: Create named range "DepartmentColumn" for C2:C51, then use =SUMIF(DepartmentColumn,"Sales",E2:E51)
+
+**Creating named ranges:**
+<ACTION type="createNamedRange" target="C2:C51">
+{"name":"DepartmentColumn","scope":"workbook","comment":"Department data for all employees"}
+</ACTION>
+
+**Named constants (no cell reference):**
+<ACTION type="createNamedRange" target="Sheet1!A1">
+{"name":"TaxRate","formula":"=0.15","scope":"workbook","comment":"Standard tax rate"}
+</ACTION>
+
+**Benefits:**
+- Formulas become self-documenting (=TaxRate*Salary vs =0.15*D2)
+- Single point of update for constants
+- Easier to audit and maintain
+- Reduces errors from incorrect range references
 
 ## OUTPUT FORMAT
 Always provide formulas in ACTION tags:
@@ -674,6 +701,8 @@ Available table styles: TableStyleLight1-21, TableStyleMedium1-28, TableStyleDar
 **Slicer Selection:** Use "selectedItems" array to filter data; "multiSelect":false for single-item selection only
 **Field Validation:** The field must exist as a column in the table; an error is thrown with available columns if not found
 
+**Tip:** After creating a table, consider creating a named range for the entire table range if it will be referenced in formulas outside the table (e.g., for VLOOKUP source data).
+
 Explain what the table operation does and why it benefits the user's workflow.`,
 
     [TASK_TYPES.PIVOT]: `You are an Excel PivotTable Expert. Your specialty is creating powerful data summaries and pivot analyses.
@@ -758,6 +787,8 @@ You can execute PivotTable operations directly through ACTION tags. Always expla
 Available aggregation functions: Sum, Count, Average, Max, Min, CountNumbers, StdDev, Var
 Available layouts: Compact (default), Outline, Tabular
 **Slicer Selection:** Use "selectedItems" to pre-filter data; "multiSelect":false restricts to single item selection
+
+**Tip:** Named ranges can be used as PivotTable source data (e.g., target="SalesData" instead of "A1:E100") for easier maintenance when data range changes.
 
 ## COMMON PIVOTTABLE SCENARIOS
 
@@ -1335,6 +1366,79 @@ Example: Create a sheet named "Summary":
 **Table/Pivot Search:** Tables and PivotTables are searched across all worksheets, not just the active sheet
 **Multi-step workflow:** 1) Create table/pivot, 2) createSlicer for each filter dimension, 3) configureSlicer for styling/layout/selection
 **Note:** Slicers are bound to source at creation; reconnecting requires deletion and recreation
+
+## NAMED RANGE OPERATIONS
+Named ranges provide readable, maintainable references to cells, ranges, constants, and formulas.
+
+**Create Named Range (for range on active sheet):**
+<ACTION type="createNamedRange" target="A1:E100">
+{"name":"SalesData","scope":"workbook","comment":"Q1 sales records"}
+</ACTION>
+
+**Create Named Range (for range on another sheet - cross-sheet reference):**
+<ACTION type="createNamedRange" target="Sheet2!A1:B50">
+{"name":"DepartmentList","scope":"workbook","comment":"Department lookup data"}
+</ACTION>
+
+**Create Named Constant:**
+<ACTION type="createNamedRange" target="Sheet1!A1">
+{"name":"TaxRate","formula":"=0.15","scope":"workbook","comment":"Standard tax rate"}
+</ACTION>
+
+**Create Named Formula (referencing other sheets):**
+<ACTION type="createNamedRange" target="Sheet1!A1">
+{"name":"CurrentQuarterSales","formula":"=SUMIFS(SalesData[Amount],SalesData[Date],\">=\"&DATE(2024,1,1))","scope":"workbook"}
+</ACTION>
+
+**Update Named Range:**
+<ACTION type="updateNamedRange" target="SalesData">
+{"scope":"workbook","newFormula":"=Sheet1!A1:E200","newComment":"Updated to include Q2"}
+</ACTION>
+
+**Delete Named Range:**
+<ACTION type="deleteNamedRange" target="OldRangeName">
+{"scope":"workbook"}
+</ACTION>
+
+**List Named Ranges (diagnostics-only - results logged to diagnostics panel):**
+<ACTION type="listNamedRanges" target="all">
+{"scope":"all"}
+</ACTION>
+Note: listNamedRanges is for diagnostics only. Existing named ranges are already included in the data context above.
+
+**Target Formats:**
+- Local range: "A1:E100" (uses active sheet)
+- Cross-sheet range: "Sheet2!A1:B50" or "'Sheet Name With Spaces'!A1:B50"
+- For named constants/formulas: use "formula" option instead of target
+
+**Scope Options:**
+- "workbook": Accessible from any sheet (default, recommended for shared data)
+- "worksheet": Only accessible from the specific sheet (use for sheet-specific ranges)
+
+**Naming Rules:**
+- Must start with a letter or underscore
+- Can contain letters, numbers, underscores, periods
+- No spaces (use underscores: Sales_Data, not Sales Data)
+- Case-insensitive (SalesData = salesdata)
+- Cannot conflict with cell references (e.g., "A1", "XFD1048576")
+- Max 255 characters
+
+**Best Practices:**
+1. Use descriptive names (SalesData, not Range1)
+2. Use PascalCase or snake_case for readability
+3. Add comments to document purpose
+4. Prefer workbook scope for reusable ranges/constants
+5. Use worksheet scope only when name conflicts with other sheets
+6. Create named constants for magic numbers (TaxRate, CommissionRate)
+7. Reference in formulas: =SUM(SalesData) or =TotalRevenue*TaxRate
+8. For cross-sheet references, use sheet-qualified target (e.g., "Sheet2!A1:B50")
+
+**When to Suggest Named Ranges:**
+- User references same range in multiple formulas
+- Formulas use hardcoded constants (suggest named constants)
+- Complex range references that would benefit from descriptive names
+- Building dashboards or templates for reuse
+- User asks to "make formulas more readable"
 
 ## ADVANCED ACTIONS (executor support pending)
 **NOTE:** The following actions are planned but not yet fully supported. If you need these features, explain the steps to the user and suggest they perform the action manually in Excel, OR use supported actions (formula, values, format, chart, validation, sort, filter, copy, copyValues, removeDuplicates, sheet, table operations, data manipulation, pivot table operations) as alternatives where possible.

@@ -202,6 +202,33 @@ async function readExcelData(state, updateContextInfo, logDiagnostic) {
                         log(`Could not read PivotTables for sheet "${sheetName}": ${pivotError.message}`);
                     }
                     
+                    // Detect worksheet-scoped named ranges
+                    const worksheetNamedRanges = [];
+                    try {
+                        sheet.names.load("items");
+                        await ctx.sync();
+                        
+                        if (sheet.names.items.length > 0) {
+                            for (const item of sheet.names.items) {
+                                item.load(["name", "formula", "comment", "type", "visible"]);
+                            }
+                            await ctx.sync();
+                            
+                            for (const item of sheet.names.items) {
+                                worksheetNamedRanges.push({
+                                    name: item.name,
+                                    formula: item.formula,
+                                    comment: item.comment || "",
+                                    type: item.type,
+                                    visible: item.visible
+                                });
+                            }
+                            log(`Found ${worksheetNamedRanges.length} worksheet-scoped named ranges on "${sheetName}"`);
+                        }
+                    } catch (namedRangeError) {
+                        log(`Could not read named ranges for sheet "${sheetName}": ${namedRangeError.message}`);
+                    }
+                    
                     allSheetsData.push({
                         sheetName,
                         address: usedRange.address,
@@ -214,10 +241,11 @@ async function readExcelData(state, updateContextInfo, logDiagnostic) {
                         colCount,
                         dataStartRow: startRow + 2,
                         headerValidation,
-                        pivotTables
+                        pivotTables,
+                        namedRanges: worksheetNamedRanges
                     });
                     
-                    log(`Read sheet "${sheetName}": ${rowCount} rows × ${colCount} cols, ${pivotTables.length} PivotTables`);
+                    log(`Read sheet "${sheetName}": ${rowCount} rows × ${colCount} cols, ${pivotTables.length} PivotTables, ${worksheetNamedRanges.length} named ranges`);
                 } catch (e) {
                     // Sheet might be empty, log and skip it
                     const sheetName = sheet.name || "Unknown";
@@ -226,10 +254,38 @@ async function readExcelData(state, updateContextInfo, logDiagnostic) {
                 }
             }
             
+            // Detect workbook-scoped named ranges
+            const workbookNamedRanges = [];
+            try {
+                ctx.workbook.names.load("items");
+                await ctx.sync();
+                
+                if (ctx.workbook.names.items.length > 0) {
+                    for (const item of ctx.workbook.names.items) {
+                        item.load(["name", "formula", "comment", "type", "visible"]);
+                    }
+                    await ctx.sync();
+                    
+                    for (const item of ctx.workbook.names.items) {
+                        workbookNamedRanges.push({
+                            name: item.name,
+                            formula: item.formula,
+                            comment: item.comment || "",
+                            type: item.type,
+                            visible: item.visible
+                        });
+                    }
+                    log(`Found ${workbookNamedRanges.length} workbook-scoped named ranges`);
+                }
+            } catch (namedRangeError) {
+                log(`Could not read workbook named ranges: ${namedRangeError.message}`);
+            }
+            
             // Handle case where no sheets have usable data
             if (allSheetsData.length === 0) {
                 state.currentData = null;
                 state.allSheetsData = [];
+                state.workbookNamedRanges = workbookNamedRanges;
                 updateContextInfo("No usable data found in any sheet");
                 log("No usable data found in any sheet");
                 return;
@@ -239,6 +295,7 @@ async function readExcelData(state, updateContextInfo, logDiagnostic) {
             const activeSheetData = allSheetsData.find(s => s.sheetName === activeSheetName);
             state.currentData = activeSheetData || allSheetsData[0] || null;
             state.allSheetsData = shouldReadAllSheets ? allSheetsData : [];
+            state.workbookNamedRanges = workbookNamedRanges;
             
             if (state.currentData) {
                 const scopeText = shouldReadAllSheets ? ` (${allSheetsData.length} sheets)` : "";
@@ -459,6 +516,67 @@ function buildDataContext(state) {
             }
         }
         context += `\n**Note:** You can refresh existing PivotTables with refreshPivotTable action or create new ones with createPivotTable.\n`;
+    }
+    
+    // Collect all named ranges (workbook + worksheet scoped)
+    const allNamedRanges = [];
+    
+    // Add workbook-scoped names
+    if (state.workbookNamedRanges && state.workbookNamedRanges.length > 0) {
+        for (const nr of state.workbookNamedRanges) {
+            allNamedRanges.push({ ...nr, scope: "workbook" });
+        }
+    }
+    
+    // Add worksheet-scoped names from current sheet
+    if (state.currentData.namedRanges && state.currentData.namedRanges.length > 0) {
+        for (const nr of state.currentData.namedRanges) {
+            allNamedRanges.push({ ...nr, scope: "worksheet", sheetName: state.currentData.sheetName });
+        }
+    }
+    
+    // Add worksheet-scoped names from other sheets
+    if (state.allSheetsData && state.allSheetsData.length > 0) {
+        for (const sheet of state.allSheetsData) {
+            if (sheet.sheetName === sheetName) continue; // Already added
+            if (sheet.namedRanges && sheet.namedRanges.length > 0) {
+                for (const nr of sheet.namedRanges) {
+                    allNamedRanges.push({ ...nr, scope: "worksheet", sheetName: sheet.sheetName });
+                }
+            }
+        }
+    }
+    
+    if (allNamedRanges.length > 0) {
+        context += `\n## EXISTING NAMED RANGES IN WORKBOOK\n`;
+        context += `Named ranges improve formula readability and maintainability. You can reference these in formulas.\n\n`;
+        
+        // Group by scope
+        const workbookNames = allNamedRanges.filter(nr => nr.scope === "workbook");
+        const worksheetNames = allNamedRanges.filter(nr => nr.scope === "worksheet");
+        
+        if (workbookNames.length > 0) {
+            context += `### Workbook-Scoped Names (accessible from any sheet)\n`;
+            for (const nr of workbookNames) {
+                context += `- **${nr.name}**: ${nr.formula}`;
+                if (nr.comment) context += ` (${nr.comment})`;
+                context += `\n`;
+            }
+            context += `\n`;
+        }
+        
+        if (worksheetNames.length > 0) {
+            context += `### Worksheet-Scoped Names (sheet-specific)\n`;
+            for (const nr of worksheetNames) {
+                context += `- **${nr.name}** (${nr.sheetName}): ${nr.formula}`;
+                if (nr.comment) context += ` (${nr.comment})`;
+                context += `\n`;
+            }
+            context += `\n`;
+        }
+        
+        context += `**Usage in formulas:** Reference by name (e.g., =SUM(SalesData) or =TotalRevenue*0.1)\n`;
+        context += `**Note:** You can create new named ranges with createNamedRange action for frequently used ranges.\n`;
     }
     
     return context;

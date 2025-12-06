@@ -80,7 +80,10 @@ async function executeAction(ctx, sheet, action) {
         "configureSlicer",       // target is slicer name
         "connectSlicerToTable",  // target is slicer name
         "connectSlicerToPivot",  // target is slicer name
-        "deleteSlicer"           // target is slicer name
+        "deleteSlicer",          // target is slicer name
+        "deleteNamedRange",      // target is named range name
+        "updateNamedRange",      // target is named range name
+        "listNamedRanges"        // target is scope option
     ];
     
     // Only pre-load range for actions that actually need it
@@ -253,6 +256,22 @@ async function executeAction(ctx, sheet, action) {
             
         case "deleteSlicer":
             await deleteSlicer(ctx, sheet, action);
+            break;
+            
+        case "createNamedRange":
+            await createNamedRange(ctx, sheet, action);
+            break;
+            
+        case "deleteNamedRange":
+            await deleteNamedRange(ctx, sheet, action);
+            break;
+            
+        case "updateNamedRange":
+            await updateNamedRange(ctx, sheet, action);
+            break;
+            
+        case "listNamedRanges":
+            await listNamedRanges(ctx, sheet, action);
             break;
             
         default:
@@ -3698,6 +3717,377 @@ async function deleteSlicer(ctx, sheet, action) {
 }
 
 // ============================================================================
+// Named Range Operations
+// ============================================================================
+
+/**
+ * Validates a named range name
+ * @param {string} name - Name to validate
+ * @returns {Object} Validation result with isValid and error message
+ */
+function validateNamedRangeName(name) {
+    if (!name || typeof name !== "string") {
+        return { isValid: false, error: "Named range name is required." };
+    }
+    
+    // Must start with a letter or underscore
+    if (!/^[A-Za-z_]/.test(name)) {
+        return { isValid: false, error: "Named range name must start with a letter or underscore." };
+    }
+    
+    // Can only contain letters, numbers, underscores, and periods
+    if (!/^[A-Za-z_][A-Za-z0-9_.]*$/.test(name)) {
+        return { isValid: false, error: "Named range name can only contain letters, numbers, underscores, and periods. Spaces are not allowed." };
+    }
+    
+    // Cannot be a cell reference (e.g., A1, XFD1048576)
+    if (/^[A-Za-z]{1,3}\d+$/.test(name)) {
+        return { isValid: false, error: "Named range name cannot look like a cell reference (e.g., A1, B2)." };
+    }
+    
+    // Max 255 characters
+    if (name.length > 255) {
+        return { isValid: false, error: "Named range name cannot exceed 255 characters." };
+    }
+    
+    return { isValid: true };
+}
+
+/**
+ * Creates a named range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with name, scope, formula, comment
+ * 
+ * For workbook-scoped named ranges referencing other sheets, use one of:
+ * 1. Sheet-qualified target: "Sheet2!A1:B5" - will resolve to the correct sheet
+ * 2. Formula option: {"formula":"=Sheet2!A1:B5"} - for explicit formula-based references
+ * 
+ * For worksheet-scoped names, target is always relative to the active sheet.
+ */
+async function createNamedRange(ctx, sheet, action) {
+    logDiag(`Starting createNamedRange for target "${action.target}"`);
+    
+    let options = {};
+    if (action.data) {
+        try {
+            options = JSON.parse(action.data);
+        } catch (e) {
+            logDiag(`Warning: Failed to parse action.data for createNamedRange`);
+        }
+    }
+    
+    const name = options.name;
+    const scope = options.scope || "workbook";
+    const formula = options.formula;
+    const comment = options.comment || "";
+    
+    // Validate name
+    const validation = validateNamedRangeName(name);
+    if (!validation.isValid) {
+        logDiag(`Error: ${validation.error}`);
+        throw new Error(validation.error);
+    }
+    
+    try {
+        // Check for existing name
+        let existingName;
+        if (scope === "worksheet") {
+            existingName = sheet.names.getItemOrNullObject(name);
+        } else {
+            existingName = ctx.workbook.names.getItemOrNullObject(name);
+        }
+        existingName.load("isNullObject");
+        await ctx.sync();
+        
+        if (!existingName.isNullObject) {
+            const errorMsg = `A named range called '${name}' already exists in ${scope} scope. Choose a different name or delete the existing one first.`;
+            logDiag(`Error: ${errorMsg}`);
+            throw new Error(errorMsg);
+        }
+        
+        // Determine what to add - formula or range reference
+        let namedItem;
+        if (formula) {
+            // Named formula or constant
+            const formulaValue = formula.startsWith("=") ? formula : `=${formula}`;
+            if (scope === "worksheet") {
+                namedItem = sheet.names.add(name, formulaValue, comment);
+            } else {
+                namedItem = ctx.workbook.names.add(name, formulaValue, comment);
+            }
+            logDiag(`Creating named formula '${name}' with formula '${formulaValue}'`);
+        } else {
+            // Named range reference
+            if (!action.target) {
+                const errorMsg = "Target range is required for named range (e.g., 'A1:E100' or 'Sheet2!A1:B5').";
+                logDiag(`Error: ${errorMsg}`);
+                throw new Error(errorMsg);
+            }
+            
+            // Check if target contains sheet reference (e.g., "Sheet2!A1:B5")
+            let targetRange;
+            if (action.target.includes("!")) {
+                // Sheet-qualified reference - parse and resolve
+                const parts = action.target.split("!");
+                const sheetName = parts[0].replace(/^'|'$/g, ""); // Remove quotes if present
+                const rangeAddress = parts.slice(1).join("!"); // Handle edge case of ! in range
+                
+                const targetSheet = ctx.workbook.worksheets.getItemOrNullObject(sheetName);
+                targetSheet.load("isNullObject");
+                await ctx.sync();
+                
+                if (targetSheet.isNullObject) {
+                    const errorMsg = `Sheet "${sheetName}" not found. Check the sheet name in target "${action.target}".`;
+                    logDiag(`Error: ${errorMsg}`);
+                    throw new Error(errorMsg);
+                }
+                
+                targetRange = targetSheet.getRange(rangeAddress);
+                logDiag(`Resolved cross-sheet reference: ${sheetName}!${rangeAddress}`);
+            } else {
+                // Local range on active sheet
+                targetRange = sheet.getRange(action.target);
+            }
+            
+            if (scope === "worksheet") {
+                namedItem = sheet.names.add(name, targetRange, comment);
+            } else {
+                namedItem = ctx.workbook.names.add(name, targetRange, comment);
+            }
+            logDiag(`Creating named range '${name}' for range '${action.target}'`);
+        }
+        
+        await ctx.sync();
+        logDiag(`Successfully created named range '${name}' with ${scope} scope`);
+    } catch (e) {
+        const errorMsg = `Failed to create named range: ${e.message}`;
+        logDiag(`Error: ${errorMsg}`);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Deletes a named range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with named range name as target
+ */
+async function deleteNamedRange(ctx, sheet, action) {
+    logDiag(`Starting deleteNamedRange for target "${action.target}"`);
+    
+    let options = {};
+    if (action.data) {
+        try {
+            options = JSON.parse(action.data);
+        } catch (e) {
+            logDiag(`Warning: Failed to parse action.data for deleteNamedRange`);
+        }
+    }
+    
+    const name = action.target;
+    const scope = options.scope || "workbook";
+    
+    if (!name) {
+        const errorMsg = "Named range name is required.";
+        logDiag(`Error: ${errorMsg}`);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        let namedItem;
+        if (scope === "worksheet") {
+            namedItem = sheet.names.getItemOrNullObject(name);
+        } else {
+            namedItem = ctx.workbook.names.getItemOrNullObject(name);
+        }
+        namedItem.load("isNullObject");
+        await ctx.sync();
+        
+        if (namedItem.isNullObject) {
+            logDiag(`Warning: Named range '${name}' not found in ${scope} scope. Nothing to delete.`);
+            return;
+        }
+        
+        namedItem.delete();
+        await ctx.sync();
+        logDiag(`Successfully deleted named range '${name}' from ${scope} scope`);
+    } catch (e) {
+        const errorMsg = `Failed to delete named range: ${e.message}`;
+        logDiag(`Error: ${errorMsg}`);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Updates a named range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with named range name as target, newFormula, newComment
+ */
+async function updateNamedRange(ctx, sheet, action) {
+    logDiag(`Starting updateNamedRange for target "${action.target}"`);
+    
+    let options = {};
+    if (action.data) {
+        try {
+            options = JSON.parse(action.data);
+        } catch (e) {
+            logDiag(`Warning: Failed to parse action.data for updateNamedRange`);
+        }
+    }
+    
+    const name = action.target;
+    const scope = options.scope || "workbook";
+    const newFormula = options.newFormula;
+    const newComment = options.newComment;
+    
+    if (!name) {
+        const errorMsg = "Named range name is required.";
+        logDiag(`Error: ${errorMsg}`);
+        throw new Error(errorMsg);
+    }
+    
+    if (newFormula === undefined && newComment === undefined) {
+        const errorMsg = "At least one of newFormula or newComment must be provided.";
+        logDiag(`Error: ${errorMsg}`);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        let namedItem;
+        if (scope === "worksheet") {
+            namedItem = sheet.names.getItemOrNullObject(name);
+        } else {
+            namedItem = ctx.workbook.names.getItemOrNullObject(name);
+        }
+        namedItem.load(["isNullObject", "formula", "comment"]);
+        await ctx.sync();
+        
+        if (namedItem.isNullObject) {
+            const errorMsg = `Named range '${name}' not found in ${scope} scope. Use listNamedRanges to see available names.`;
+            logDiag(`Error: ${errorMsg}`);
+            throw new Error(errorMsg);
+        }
+        
+        const updates = [];
+        if (newFormula !== undefined) {
+            const formulaValue = newFormula.startsWith("=") ? newFormula : `=${newFormula}`;
+            namedItem.formula = formulaValue;
+            updates.push(`formula=${formulaValue}`);
+        }
+        if (newComment !== undefined) {
+            namedItem.comment = newComment;
+            updates.push(`comment=${newComment}`);
+        }
+        
+        await ctx.sync();
+        logDiag(`Successfully updated named range '${name}': ${updates.join(", ")}`);
+    } catch (e) {
+        const errorMsg = `Failed to update named range: ${e.message}`;
+        logDiag(`Error: ${errorMsg}`);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Lists named ranges (diagnostics-only)
+ * 
+ * NOTE: This action is primarily for diagnostics and debugging purposes.
+ * Results are logged to the diagnostics panel but are NOT returned to the AI
+ * or surfaced in the UI, as the executeAction architecture does not currently
+ * support action return values. The AI can reference named ranges through the
+ * data context built by excel-data.js which includes existing named ranges.
+ * 
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with scope option
+ * @returns {Promise<Array>} Array of named range objects (for internal use only)
+ */
+async function listNamedRanges(ctx, sheet, action) {
+    logDiag(`Starting listNamedRanges (diagnostics-only)`);
+    
+    let options = {};
+    if (action.data) {
+        try {
+            options = JSON.parse(action.data);
+        } catch (e) {
+            logDiag(`Warning: Failed to parse action.data for listNamedRanges`);
+        }
+    }
+    
+    const scope = options.scope || "all";
+    
+    try {
+        const results = [];
+        
+        // Load workbook-scoped names
+        if (scope === "all" || scope === "workbook") {
+            ctx.workbook.names.load("items");
+            await ctx.sync();
+            
+            for (const item of ctx.workbook.names.items) {
+                item.load(["name", "formula", "comment", "type", "visible"]);
+            }
+            await ctx.sync();
+            
+            for (const item of ctx.workbook.names.items) {
+                results.push({
+                    name: item.name,
+                    scope: "workbook",
+                    formula: item.formula,
+                    comment: item.comment || "",
+                    type: item.type,
+                    visible: item.visible
+                });
+            }
+            logDiag(`Found ${ctx.workbook.names.items.length} workbook-scoped named ranges`);
+        }
+        
+        // Load worksheet-scoped names
+        if (scope === "all" || scope === "worksheet") {
+            sheet.names.load("items");
+            await ctx.sync();
+            
+            for (const item of sheet.names.items) {
+                item.load(["name", "formula", "comment", "type", "visible"]);
+            }
+            await ctx.sync();
+            
+            for (const item of sheet.names.items) {
+                results.push({
+                    name: item.name,
+                    scope: "worksheet",
+                    sheetName: sheet.name,
+                    formula: item.formula,
+                    comment: item.comment || "",
+                    type: item.type,
+                    visible: item.visible
+                });
+            }
+            logDiag(`Found ${sheet.names.items.length} worksheet-scoped named ranges`);
+        }
+        
+        // Log results
+        if (results.length === 0) {
+            logDiag("No named ranges found.");
+        } else {
+            logDiag(`=== Named Ranges (${results.length} total) ===`);
+            for (const nr of results) {
+                const scopeInfo = nr.scope === "worksheet" ? `worksheet:${nr.sheetName}` : "workbook";
+                logDiag(`  ${nr.name} [${scopeInfo}]: ${nr.formula}${nr.comment ? ` (${nr.comment})` : ""}`);
+            }
+        }
+        
+        return results;
+    } catch (e) {
+        const errorMsg = `Failed to list named ranges: ${e.message}`;
+        logDiag(`Error: ${errorMsg}`);
+        throw new Error(errorMsg);
+    }
+}
+
+// ============================================================================
 // Exports
 // ============================================================================
 
@@ -3744,5 +4134,9 @@ export {
     configureSlicer,
     connectSlicerToTable,
     connectSlicerToPivot,
-    deleteSlicer
+    deleteSlicer,
+    createNamedRange,
+    deleteNamedRange,
+    updateNamedRange,
+    listNamedRanges
 };
