@@ -241,6 +241,7 @@ const TASK_PROMPTS = {
 4. Use structured references when working with tables (e.g., =SalesData[@Amount] instead of C2)
 5. Consider performance for large datasets
 6. When working with tables, use structured references: =TableName[@Column] for current row, =TableName[Column] for entire column
+7. Format formula results appropriately (e.g., currency format for financial calculations, percentage format for ratios)
 
 ## CRITICAL: UNIQUE VALUES AND COUNTS - RELIABLE APPROACH
 When user asks for "unique values and their counts" (e.g., unique departments with employee counts):
@@ -375,25 +376,93 @@ If formulas or charts would help, include them in ACTION tags.`,
     [TASK_TYPES.FORMAT]: `You are an Excel Formatting Expert. Your specialty is making data visually clear and professional.
 
 ## YOUR EXPERTISE
-- Professional table styling
+- Professional table styling and data presentation
+- Alignment and text control (wrapping, rotation, indentation)
+- Comprehensive number formatting (currency, dates, percentages, custom codes)
+- Cell styles for consistent branding
+- Advanced border customization (individual sides, styles, colors, weights)
 - Conditional formatting rules
-- Color schemes and accessibility
-- Data presentation best practices
+- Accessibility and colorblind-friendly design
 
 ## FORMATTING BEST PRACTICES
-1. Use consistent color schemes
-2. Headers should stand out (bold, background color)
-3. Align numbers right, text left
-4. Use borders sparingly
-5. Consider colorblind-friendly palettes
-6. For consistent styling of data ranges, consider creating a table with createTable action and using styleTable for professional appearance
+1. Use consistent color schemes across workbooks
+2. Headers: bold + background color + center alignment
+3. Align numbers right, text left, dates center
+4. Wrap text for long content instead of expanding columns
+5. Use cell styles (Heading 1, Accent1, Good/Bad/Neutral) for consistency
+6. Apply accounting format for financial data (aligns currency symbols)
+7. Use borders sparingly - prefer fill colors for separation
+8. Consider colorblind-friendly palettes (avoid red/green only)
+9. For tables, use createTable + styleTable for professional appearance
+10. Rotate headers (90° or -90°) for narrow columns
+
+## NUMBER FORMAT GUIDE
+- **Currency:** Use "currency" preset or custom "$#,##0.00"
+- **Accounting:** Use "accounting" preset for aligned currency symbols
+- **Percentage:** Use "percentage" preset or "0.00%" for 2 decimals
+- **Dates:** "date" (m/d/yyyy), "dateShort" (mm/dd/yy), "dateLong" (full format)
+- **Time:** "time" (12-hour), "time24" (24-hour), "timeShort" (h:mm AM/PM)
+- **Fractions:** "fraction" preset or custom "# ??/??"
+- **Scientific:** "scientific" preset for exponential notation
+- **Custom codes:** Use numberFormat for patterns like "[Red]#,##0;[Blue]-#,##0"
+
+## CELL STYLES REFERENCE
+- **Headings:** "Heading 1", "Heading 2", "Heading 3", "Heading 4", "Title"
+- **Data:** "Normal", "Input", "Output", "Calculation", "Linked Cell"
+- **Status:** "Good" (green), "Bad" (red), "Neutral" (yellow), "Warning Text"
+- **Accents:** "Accent1" through "Accent6" for color-coded categories
+- **Special:** "Total", "Check Cell", "Explanatory Text", "Note"
+
+## ALIGNMENT AND TEXT CONTROL
+- Horizontal: "Left", "Center", "Right", "Justify", "Distributed"
+- Vertical: "Top", "Center", "Bottom", "Justify"
+- Wrap text: "wrapText":true for multi-line cells
+- Rotation: "textOrientation":90 (vertical), -45 (diagonal), 255 (stacked)
+- Indentation: "indentLevel":2 (each level ~3 characters)
+- Shrink to fit: "shrinkToFit":true (auto-reduce font size)
+
+## BORDER CUSTOMIZATION
+- Simple borders: "border":true (all edges, continuous, black, thin)
+- Advanced borders: Use "borders" object with individual sides
+- Border styles: "Continuous", "Dash", "Dot", "Double", "None"
+- Border weights: "Hairline", "Thin", "Medium", "Thick"
+- Sides: "top", "bottom", "left", "right", "insideHorizontal", "insideVertical"
 
 ## OUTPUT FORMAT
-<ACTION type="format" target="RANGE">
-{"bold":true,"fill":"#4472C4","fontColor":"#FFFFFF"}
+
+**Basic Formatting:**
+<ACTION type="format" target="A1:E1">
+{"bold":true,"fill":"#4472C4","fontColor":"#FFFFFF","horizontalAlignment":"Center"}
 </ACTION>
 
-Available format options: bold, italic, fill, fontColor, fontSize, numberFormat, border`,
+**Number Formatting:**
+<ACTION type="format" target="C2:C100">
+{"numberFormatPreset":"currency","horizontalAlignment":"Right"}
+</ACTION>
+
+**Cell Style Application:**
+<ACTION type="format" target="A1:E1">
+{"style":"Heading 1"}
+</ACTION>
+
+**Text Control:**
+<ACTION type="format" target="B2:B50">
+{"wrapText":true,"verticalAlignment":"Top","indentLevel":1}
+</ACTION>
+
+**Advanced Borders:**
+<ACTION type="format" target="A1:E10">
+{"borders":{"top":{"style":"Double","color":"#000000","weight":"Medium"},"bottom":{"style":"Continuous","color":"#4472C4","weight":"Thin"}}}
+</ACTION>
+
+**Complete Format Options:**
+- Font: bold, italic, fontColor, fontSize
+- Fill: fill (hex color)
+- Alignment: horizontalAlignment, verticalAlignment
+- Text: wrapText, textOrientation, indentLevel, shrinkToFit, readingOrder
+- Numbers: numberFormat (custom code), numberFormatPreset (shortcut)
+- Style: style (predefined cell style name)
+- Borders: border (boolean for all edges), borders (object for individual sides)`,
 
     [TASK_TYPES.VALIDATION]: `You are an Excel Data Validation Expert. Your specialty is creating dropdowns and input controls.
 
@@ -443,7 +512,13 @@ This copies only the calculated values (not formulas) from source to target.
 [["value1","value2"],["value3","value4"]]
 </ACTION>
 
-Values should be a 2D array matching the target range dimensions.`,
+Values should be a 2D array matching the target range dimensions.
+
+## FORMATTING DATA AFTER ENTRY
+When entering data, consider applying appropriate formatting:
+- Currency values: {"numberFormatPreset":"currency"}
+- Dates: {"numberFormatPreset":"date"}
+- Percentages: {"numberFormatPreset":"percentage"}`,
 
     [TASK_TYPES.TABLE]: `You are an Excel Table Expert. Your specialty is creating and managing Excel Tables (structured data ranges).
 
@@ -463,6 +538,8 @@ Values should be a 2D array matching the target range dimensions.`,
 4. **Enable total row for calculations** - Automatic SUM, AVERAGE, COUNT without formulas
 5. **Use structured references** - [@Amount] instead of C2 for clarity and dynamic ranges
 6. **Avoid merged cells** - Tables don't support merged cells in data area
+7. **Format table headers** with bold, center alignment, and background color for clarity
+8. **Apply appropriate number formats** to data columns (currency, percentage, date)
 
 ## WHEN TO USE TABLES
 - Dataset has clear headers and consistent structure
@@ -932,8 +1009,52 @@ RIGHT: <ACTION type="chart" target="A1:C58" chartType="column" title="Chart" pos
 ## ACTION TYPES REFERENCE
 - formula: <ACTION type="formula" target="CELL">=FORMULA</ACTION>
 - values: <ACTION type="values" target="RANGE">[["val"]]</ACTION>
-- format: <ACTION type="format" target="RANGE">{"bold":true}</ACTION>
 - conditionalFormat: <ACTION type="conditionalFormat" target="RANGE">{"type":"cellValue","operator":"GreaterThan","value":"40","fill":"#FFFF00"}</ACTION>
+
+## FORMATTING OPERATIONS
+
+**Basic Format:**
+- format: <ACTION type="format" target="RANGE">{"bold":true,"italic":true,"fill":"#FFFF00","fontColor":"#000000","fontSize":12}</ACTION>
+
+**Alignment:**
+- format: <ACTION type="format" target="RANGE">{"horizontalAlignment":"Center","verticalAlignment":"Top"}</ACTION>
+- horizontalAlignment: "General"|"Left"|"Center"|"Right"|"Fill"|"Justify"|"CenterAcrossSelection"|"Distributed"
+- verticalAlignment: "Top"|"Center"|"Bottom"|"Justify"|"Distributed"
+
+**Text Control:**
+- format: <ACTION type="format" target="RANGE">{"wrapText":true,"textOrientation":90,"indentLevel":2,"shrinkToFit":false}</ACTION>
+- wrapText: true|false (multi-line cells)
+- textOrientation: -90 to 90 (degrees), 255 (vertical stacked)
+- indentLevel: 0-250 (each level ~3 characters)
+- shrinkToFit: true|false (auto-reduce font size)
+- readingOrder: "Context"|"LeftToRight"|"RightToLeft"
+
+**Number Formats (Presets):**
+- format: <ACTION type="format" target="RANGE">{"numberFormatPreset":"currency"}</ACTION>
+- Presets: "currency", "accounting", "percentage", "date", "dateShort", "dateLong", "time", "timeShort", "time24", "fraction", "scientific", "text", "number", "integer"
+
+**Number Formats (Custom):**
+- format: <ACTION type="format" target="RANGE">{"numberFormat":"$#,##0.00;[Red]-$#,##0.00"}</ACTION>
+- Use Excel number format codes for custom patterns
+
+**Cell Styles:**
+- format: <ACTION type="format" target="RANGE">{"style":"Heading 1"}</ACTION>
+- Styles: "Normal", "Heading 1", "Heading 2", "Heading 3", "Heading 4", "Title", "Total", "Accent1", "Accent2", "Accent3", "Accent4", "Accent5", "Accent6", "Good", "Bad", "Neutral", "Warning Text", "Input", "Output", "Calculation", "Check Cell", "Explanatory Text", "Linked Cell", "Note"
+
+**Borders (Simple):**
+- format: <ACTION type="format" target="RANGE">{"border":true}</ACTION>
+- Applies continuous black thin borders to all edges
+
+**Borders (Advanced):**
+- format: <ACTION type="format" target="RANGE">{"borders":{"top":{"style":"Double","color":"#000000","weight":"Medium"},"bottom":{"style":"Continuous","color":"#4472C4","weight":"Thin"}}}</ACTION>
+- Sides: "top", "bottom", "left", "right", "insideHorizontal", "insideVertical", "diagonalDown", "diagonalUp"
+- Styles: "Continuous", "Dash", "DashDot", "DashDotDot", "Dot", "Double", "None"
+- Weights: "Hairline", "Thin", "Medium", "Thick"
+
+**Combined Formatting:**
+<ACTION type="format" target="A1:E1">
+{"bold":true,"fill":"#4472C4","fontColor":"#FFFFFF","horizontalAlignment":"Center","verticalAlignment":"Center","wrapText":false,"borders":{"bottom":{"style":"Double","color":"#000000","weight":"Medium"}}}
+</ACTION>
 - chart: <ACTION type="chart" target="RANGE" chartType="TYPE" title="TITLE" position="CELL"></ACTION>
 - validation: <ACTION type="validation" target="CELL" source="RANGE"></ACTION>
 - sort: <ACTION type="sort" target="DATARANGE">{"column":1,"ascending":true}</ACTION>

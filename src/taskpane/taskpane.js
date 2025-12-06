@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "3.5.3";
+const VERSION = "3.5.4";
 
 import {
     detectTaskType,
@@ -2432,17 +2432,133 @@ async function applyFormat(ctx, range, data) {
     let fmt;
     try { fmt = JSON.parse(data); } catch { fmt = {}; }
     
-    if (fmt.bold) range.format.font.bold = true;
-    if (fmt.italic) range.format.font.italic = true;
-    if (fmt.fill) range.format.fill.color = fmt.fill;
+    // ========== Font Properties ==========
+    if (fmt.bold !== undefined) range.format.font.bold = fmt.bold;
+    if (fmt.italic !== undefined) range.format.font.italic = fmt.italic;
     if (fmt.fontColor) range.format.font.color = fmt.fontColor;
     if (fmt.fontSize) range.format.font.size = fmt.fontSize;
-    if (fmt.numberFormat) range.numberFormat = [[fmt.numberFormat]];
-    if (fmt.border) {
-        range.format.borders.getItem("EdgeTop").style = "Continuous";
-        range.format.borders.getItem("EdgeBottom").style = "Continuous";
-        range.format.borders.getItem("EdgeLeft").style = "Continuous";
-        range.format.borders.getItem("EdgeRight").style = "Continuous";
+    
+    // ========== Fill Properties ==========
+    if (fmt.fill) range.format.fill.color = fmt.fill;
+    
+    // ========== Alignment Properties ==========
+    const validHorizontalAlignments = ["General", "Left", "Center", "Right", "Fill", "Justify", "CenterAcrossSelection", "Distributed"];
+    const validVerticalAlignments = ["Top", "Center", "Bottom", "Justify", "Distributed"];
+    
+    if (fmt.horizontalAlignment && validHorizontalAlignments.includes(fmt.horizontalAlignment)) {
+        range.format.horizontalAlignment = fmt.horizontalAlignment;
+    }
+    if (fmt.verticalAlignment && validVerticalAlignments.includes(fmt.verticalAlignment)) {
+        range.format.verticalAlignment = fmt.verticalAlignment;
+    }
+    
+    // ========== Text Control Properties ==========
+    if (fmt.wrapText !== undefined) range.format.wrapText = fmt.wrapText;
+    if (fmt.textOrientation !== undefined) {
+        const orientation = parseInt(fmt.textOrientation);
+        if ((orientation >= -90 && orientation <= 90) || orientation === 255) {
+            range.format.textOrientation = orientation;
+        }
+    }
+    if (fmt.indentLevel !== undefined) {
+        const indent = parseInt(fmt.indentLevel);
+        if (indent >= 0 && indent <= 250) range.format.indentLevel = indent;
+    }
+    if (fmt.shrinkToFit !== undefined) range.format.shrinkToFit = fmt.shrinkToFit;
+    if (fmt.readingOrder) {
+        const validReadingOrders = ["Context", "LeftToRight", "RightToLeft"];
+        if (validReadingOrders.includes(fmt.readingOrder)) {
+            range.format.readingOrder = fmt.readingOrder;
+        }
+    }
+    
+    // ========== Number Format ==========
+    const numberFormatPresets = {
+        "currency": "$#,##0.00",
+        "accounting": "_($* #,##0.00_);_($* (#,##0.00);_($* \"-\"??_);_(@_)",
+        "percentage": "0.00%",
+        "date": "m/d/yyyy",
+        "dateShort": "mm/dd/yy",
+        "dateLong": "dddd, mmmm dd, yyyy",
+        "time": "h:mm:ss AM/PM",
+        "timeShort": "h:mm AM/PM",
+        "time24": "hh:mm:ss",
+        "fraction": "# ?/?",
+        "scientific": "0.00E+00",
+        "text": "@",
+        "number": "#,##0.00",
+        "integer": "#,##0"
+    };
+    
+    if (fmt.numberFormatPreset && numberFormatPresets[fmt.numberFormatPreset]) {
+        range.numberFormat = [[numberFormatPresets[fmt.numberFormatPreset]]];
+    } else if (fmt.numberFormat) {
+        range.numberFormat = [[fmt.numberFormat]];
+    }
+    
+    // ========== Cell Style ==========
+    const validStyles = [
+        "Normal", "Heading 1", "Heading 2", "Heading 3", "Heading 4", "Title", "Total",
+        "Accent1", "Accent2", "Accent3", "Accent4", "Accent5", "Accent6",
+        "Good", "Bad", "Neutral", "Warning Text",
+        "Input", "Output", "Calculation", "Check Cell", "Explanatory Text", "Linked Cell", "Note"
+    ];
+    
+    if (fmt.style && validStyles.includes(fmt.style)) {
+        try { range.format.style = fmt.style; } catch (e) { console.warn("Style error:", e); }
+    }
+    
+    // ========== Border Properties ==========
+    const validBorderStyles = ["Continuous", "Dash", "DashDot", "DashDotDot", "Dot", "Double", "None"];
+    const validBorderWeights = ["Hairline", "Thin", "Medium", "Thick"];
+    const borderSides = {
+        "top": "EdgeTop", "bottom": "EdgeBottom", "left": "EdgeLeft", "right": "EdgeRight",
+        "insideHorizontal": "InsideHorizontal", "insideVertical": "InsideVertical",
+        "diagonalDown": "DiagonalDown", "diagonalUp": "DiagonalUp"
+    };
+    
+    // Simple border (backward compatible) - applies continuous black thin borders to all edges
+    if (fmt.border === true) {
+        const edgeTop = range.format.borders.getItem("EdgeTop");
+        edgeTop.style = "Continuous";
+        edgeTop.color = "#000000";
+        edgeTop.weight = "Thin";
+        
+        const edgeBottom = range.format.borders.getItem("EdgeBottom");
+        edgeBottom.style = "Continuous";
+        edgeBottom.color = "#000000";
+        edgeBottom.weight = "Thin";
+        
+        const edgeLeft = range.format.borders.getItem("EdgeLeft");
+        edgeLeft.style = "Continuous";
+        edgeLeft.color = "#000000";
+        edgeLeft.weight = "Thin";
+        
+        const edgeRight = range.format.borders.getItem("EdgeRight");
+        edgeRight.style = "Continuous";
+        edgeRight.color = "#000000";
+        edgeRight.weight = "Thin";
+    }
+    
+    // Advanced borders (individual sides with style/color/weight)
+    if (fmt.borders && typeof fmt.borders === "object") {
+        for (const [side, borderConfig] of Object.entries(fmt.borders)) {
+            const excelSide = borderSides[side];
+            if (!excelSide) continue;
+            
+            try {
+                const border = range.format.borders.getItem(excelSide);
+                if (borderConfig.style && validBorderStyles.includes(borderConfig.style)) {
+                    border.style = borderConfig.style;
+                } else {
+                    border.style = "Continuous";
+                }
+                if (borderConfig.color) border.color = borderConfig.color;
+                if (borderConfig.weight && validBorderWeights.includes(borderConfig.weight)) {
+                    border.weight = borderConfig.weight;
+                }
+            } catch (e) { console.warn("Border error:", e); }
+        }
     }
 }
 

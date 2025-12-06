@@ -425,28 +425,243 @@ function applyValues(range, data) {
 // ============================================================================
 
 /**
- * Applies formatting to a range
+ * Applies formatting to a range with comprehensive Office.js support
  * @param {Excel.RequestContext} ctx - Excel context
  * @param {Excel.Range} range - Target range
  * @param {string} data - JSON string of format options
+ * 
+ * Supported format options:
+ * - Font: bold, italic, fontColor, fontSize
+ * - Fill: fill (hex color)
+ * - Alignment: horizontalAlignment, verticalAlignment
+ * - Text Control: wrapText, textOrientation, indentLevel, shrinkToFit, readingOrder
+ * - Number Format: numberFormat (custom code), numberFormatPreset (shortcut)
+ * - Cell Style: style (predefined style name)
+ * - Borders: border (boolean for all edges), borders (object for individual sides)
  */
 async function applyFormat(ctx, range, data) {
     let fmt;
     try { fmt = JSON.parse(data); } catch { fmt = {}; }
     
-    if (fmt.bold) range.format.font.bold = true;
-    if (fmt.italic) range.format.font.italic = true;
-    if (fmt.fill) range.format.fill.color = fmt.fill;
-    if (fmt.fontColor) range.format.font.color = fmt.fontColor;
-    if (fmt.fontSize) range.format.font.size = fmt.fontSize;
-    if (fmt.numberFormat) range.numberFormat = [[fmt.numberFormat]];
-    if (fmt.border) {
-        range.format.borders.getItem("EdgeTop").style = "Continuous";
-        range.format.borders.getItem("EdgeBottom").style = "Continuous";
-        range.format.borders.getItem("EdgeLeft").style = "Continuous";
-        range.format.borders.getItem("EdgeRight").style = "Continuous";
+    const appliedProps = [];
+    
+    // ========== Font Properties ==========
+    if (fmt.bold !== undefined) {
+        range.format.font.bold = fmt.bold;
+        appliedProps.push("bold");
     }
-    logDiag(`Applied formatting: ${Object.keys(fmt).join(", ")}`);
+    if (fmt.italic !== undefined) {
+        range.format.font.italic = fmt.italic;
+        appliedProps.push("italic");
+    }
+    if (fmt.fontColor) {
+        range.format.font.color = fmt.fontColor;
+        appliedProps.push("fontColor");
+    }
+    if (fmt.fontSize) {
+        range.format.font.size = fmt.fontSize;
+        appliedProps.push("fontSize");
+    }
+    
+    // ========== Fill Properties ==========
+    if (fmt.fill) {
+        range.format.fill.color = fmt.fill;
+        appliedProps.push("fill");
+    }
+    
+    // ========== Alignment Properties ==========
+    const validHorizontalAlignments = ["General", "Left", "Center", "Right", "Fill", "Justify", "CenterAcrossSelection", "Distributed"];
+    const validVerticalAlignments = ["Top", "Center", "Bottom", "Justify", "Distributed"];
+    
+    if (fmt.horizontalAlignment) {
+        if (validHorizontalAlignments.includes(fmt.horizontalAlignment)) {
+            range.format.horizontalAlignment = fmt.horizontalAlignment;
+            appliedProps.push("horizontalAlignment");
+        } else {
+            logDiag(`Invalid horizontalAlignment: ${fmt.horizontalAlignment}`);
+        }
+    }
+    if (fmt.verticalAlignment) {
+        if (validVerticalAlignments.includes(fmt.verticalAlignment)) {
+            range.format.verticalAlignment = fmt.verticalAlignment;
+            appliedProps.push("verticalAlignment");
+        } else {
+            logDiag(`Invalid verticalAlignment: ${fmt.verticalAlignment}`);
+        }
+    }
+    
+    // ========== Text Control Properties ==========
+    if (fmt.wrapText !== undefined) {
+        range.format.wrapText = fmt.wrapText;
+        appliedProps.push("wrapText");
+    }
+    if (fmt.textOrientation !== undefined) {
+        // Valid range: -90 to 90, or 255 for vertical stacked text
+        const orientation = parseInt(fmt.textOrientation);
+        if ((orientation >= -90 && orientation <= 90) || orientation === 255) {
+            range.format.textOrientation = orientation;
+            appliedProps.push("textOrientation");
+        } else {
+            logDiag(`Invalid textOrientation: ${fmt.textOrientation} (must be -90 to 90, or 255)`);
+        }
+    }
+    if (fmt.indentLevel !== undefined) {
+        const indent = parseInt(fmt.indentLevel);
+        if (indent >= 0 && indent <= 250) {
+            range.format.indentLevel = indent;
+            appliedProps.push("indentLevel");
+        } else {
+            logDiag(`Invalid indentLevel: ${fmt.indentLevel} (must be 0-250)`);
+        }
+    }
+    if (fmt.shrinkToFit !== undefined) {
+        range.format.shrinkToFit = fmt.shrinkToFit;
+        appliedProps.push("shrinkToFit");
+    }
+    if (fmt.readingOrder) {
+        const validReadingOrders = ["Context", "LeftToRight", "RightToLeft"];
+        if (validReadingOrders.includes(fmt.readingOrder)) {
+            range.format.readingOrder = fmt.readingOrder;
+            appliedProps.push("readingOrder");
+        } else {
+            logDiag(`Invalid readingOrder: ${fmt.readingOrder}`);
+        }
+    }
+    
+    // ========== Number Format ==========
+    // Number format presets mapping
+    const numberFormatPresets = {
+        "currency": "$#,##0.00",
+        "accounting": "_($* #,##0.00_);_($* (#,##0.00);_($* \"-\"??_);_(@_)",
+        "percentage": "0.00%",
+        "date": "m/d/yyyy",
+        "dateShort": "mm/dd/yy",
+        "dateLong": "dddd, mmmm dd, yyyy",
+        "time": "h:mm:ss AM/PM",
+        "timeShort": "h:mm AM/PM",
+        "time24": "hh:mm:ss",
+        "fraction": "# ?/?",
+        "scientific": "0.00E+00",
+        "text": "@",
+        "number": "#,##0.00",
+        "integer": "#,##0"
+    };
+    
+    if (fmt.numberFormatPreset && numberFormatPresets[fmt.numberFormatPreset]) {
+        range.numberFormat = [[numberFormatPresets[fmt.numberFormatPreset]]];
+        appliedProps.push(`numberFormatPreset:${fmt.numberFormatPreset}`);
+    } else if (fmt.numberFormat) {
+        range.numberFormat = [[fmt.numberFormat]];
+        appliedProps.push("numberFormat");
+    }
+    
+    // ========== Cell Style ==========
+    // Predefined Excel cell styles
+    const validStyles = [
+        "Normal", "Heading 1", "Heading 2", "Heading 3", "Heading 4", "Title", "Total",
+        "Accent1", "Accent2", "Accent3", "Accent4", "Accent5", "Accent6",
+        "Good", "Bad", "Neutral", "Warning Text",
+        "Input", "Output", "Calculation", "Check Cell", "Explanatory Text", "Linked Cell", "Note"
+    ];
+    
+    if (fmt.style) {
+        if (validStyles.includes(fmt.style)) {
+            try {
+                range.format.style = fmt.style;
+                appliedProps.push(`style:${fmt.style}`);
+            } catch (styleError) {
+                logDiag(`Failed to apply style "${fmt.style}": ${styleError.message}`);
+            }
+        } else {
+            logDiag(`Invalid style: ${fmt.style}. Valid styles: ${validStyles.join(", ")}`);
+        }
+    }
+    
+    // ========== Border Properties ==========
+    const validBorderStyles = ["Continuous", "Dash", "DashDot", "DashDotDot", "Dot", "Double", "None"];
+    const validBorderWeights = ["Hairline", "Thin", "Medium", "Thick"];
+    const borderSides = {
+        "top": "EdgeTop",
+        "bottom": "EdgeBottom",
+        "left": "EdgeLeft",
+        "right": "EdgeRight",
+        "insideHorizontal": "InsideHorizontal",
+        "insideVertical": "InsideVertical",
+        "diagonalDown": "DiagonalDown",
+        "diagonalUp": "DiagonalUp"
+    };
+    
+    // Simple border (backward compatible) - applies continuous black thin borders to all edges
+    if (fmt.border === true) {
+        const edgeTop = range.format.borders.getItem("EdgeTop");
+        edgeTop.style = "Continuous";
+        edgeTop.color = "#000000";
+        edgeTop.weight = "Thin";
+        
+        const edgeBottom = range.format.borders.getItem("EdgeBottom");
+        edgeBottom.style = "Continuous";
+        edgeBottom.color = "#000000";
+        edgeBottom.weight = "Thin";
+        
+        const edgeLeft = range.format.borders.getItem("EdgeLeft");
+        edgeLeft.style = "Continuous";
+        edgeLeft.color = "#000000";
+        edgeLeft.weight = "Thin";
+        
+        const edgeRight = range.format.borders.getItem("EdgeRight");
+        edgeRight.style = "Continuous";
+        edgeRight.color = "#000000";
+        edgeRight.weight = "Thin";
+        
+        appliedProps.push("border:all");
+    }
+    
+    // Advanced borders (individual sides with style/color/weight)
+    if (fmt.borders && typeof fmt.borders === "object") {
+        for (const [side, borderConfig] of Object.entries(fmt.borders)) {
+            const excelSide = borderSides[side];
+            if (!excelSide) {
+                logDiag(`Invalid border side: ${side}`);
+                continue;
+            }
+            
+            try {
+                const border = range.format.borders.getItem(excelSide);
+                
+                // Apply border style
+                if (borderConfig.style) {
+                    if (validBorderStyles.includes(borderConfig.style)) {
+                        border.style = borderConfig.style;
+                    } else {
+                        logDiag(`Invalid border style: ${borderConfig.style}`);
+                    }
+                } else {
+                    // Default to Continuous if not specified
+                    border.style = "Continuous";
+                }
+                
+                // Apply border color
+                if (borderConfig.color) {
+                    border.color = borderConfig.color;
+                }
+                
+                // Apply border weight
+                if (borderConfig.weight) {
+                    if (validBorderWeights.includes(borderConfig.weight)) {
+                        border.weight = borderConfig.weight;
+                    } else {
+                        logDiag(`Invalid border weight: ${borderConfig.weight}`);
+                    }
+                }
+                
+                appliedProps.push(`border:${side}`);
+            } catch (borderError) {
+                logDiag(`Failed to apply border for ${side}: ${borderError.message}`);
+            }
+        }
+    }
+    
+    logDiag(`Applied formatting: ${appliedProps.join(", ")}`);
 }
 
 /**
