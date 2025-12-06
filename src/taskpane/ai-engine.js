@@ -9,10 +9,11 @@
 // Configuration
 // ============================================================================
 const AI_CONFIG = {
-    CORRECTIONS_KEY: "excel_copilot_corrections",
-    PATTERNS_KEY: "excel_copilot_patterns",
-    MAX_CORRECTIONS: 50,
-    MAX_PATTERNS: 100
+    CORRECTIONS_KEY: "excel_copilot_corrections_v2",
+    PATTERNS_KEY: "excel_copilot_patterns_v2",
+    MAX_CORRECTIONS: 200,
+    MAX_PATTERNS: 200,
+    SCHEMA_VERSION: 2
 };
 
 // ============================================================================
@@ -175,10 +176,14 @@ Explain what the formula does and why you chose this approach.`,
 
 ## CRITICAL CHART RULES
 1. **ALWAYS use CONTIGUOUS ranges** - e.g., A1:B10, NOT A1:A10,C1:C10
-2. For trend analysis with non-adjacent columns, include ALL columns between them
-3. If data columns are far apart, use the full data range (e.g., A1:G100)
-4. Include headers in the first row for proper labels
-5. For line/trend charts, ensure date/time is in the first column of the range
+2. **NON-CONTIGUOUS RANGES ARE NOT SUPPORTED** - If you need columns A and D, use A1:D10 (the full block)
+3. For trend analysis with non-adjacent columns, include ALL columns between them
+4. If data columns are far apart, use the full data range (e.g., A1:G100)
+5. Include headers in the first row for proper labels
+6. For line/trend charts, ensure date/time is in the first column of the range
+
+**WARNING**: Non-contiguous ranges (e.g., "A1:A10,C1:C10") will only use the FIRST range!
+If you need multiple distant columns, specify the full contiguous block that includes them all.
 
 ## OUTPUT FORMAT
 **CRITICAL: You MUST use ACTION tags! Never output raw JSON!**
@@ -190,10 +195,12 @@ Example for trend: target="A1:G100" (full range), NOT "B1:B100,G1:G100"
 
 **WRONG (Don't do this):**
 [{"action": "chart", "target": "A1:C58"}]
+target="A1:A10,D1:D10" (non-contiguous - NOT SUPPORTED!)
 
 **RIGHT (Always do this):**
 <ACTION type="chart" target="A1:C58" chartType="column" title="My Chart" position="F2">
 </ACTION>
+target="A1:D10" (contiguous block including all needed columns)
 
 Always explain why you chose this chart type and what story it tells.`,
 
@@ -868,20 +875,66 @@ function getRAGContext(query) {
  * Adds a custom pattern to the knowledge base
  * @param {Object} pattern - Pattern to add
  */
+/**
+ * Safely writes to localStorage with size limit and error handling
+ * @param {string} key - Storage key
+ * @param {Array} data - Data to store
+ * @param {number} maxItems - Maximum items to keep
+ * @returns {boolean} True if successful
+ */
+function safeLocalStorageWrite(key, data, maxItems) {
+    try {
+        // Enforce bounded history - drop oldest items if exceeds max
+        let trimmedData = data;
+        if (Array.isArray(data) && data.length > maxItems) {
+            trimmedData = data.slice(-maxItems);
+        }
+        
+        localStorage.setItem(key, JSON.stringify(trimmedData));
+        return true;
+    } catch (e) {
+        // Quota exceeded or other storage error
+        console.warn(`localStorage write failed for ${key}:`, e.message);
+        
+        // Try to clear old data and retry with smaller dataset
+        try {
+            const reducedData = Array.isArray(data) ? data.slice(-Math.floor(maxItems / 2)) : data;
+            localStorage.setItem(key, JSON.stringify(reducedData));
+            console.warn(`Reduced ${key} storage to ${reducedData.length} items due to quota`);
+            return true;
+        } catch (retryError) {
+            console.error(`Failed to write to localStorage even after reduction:`, retryError);
+            return false;
+        }
+    }
+}
+
+/**
+ * Safely reads from localStorage with schema version check
+ * @param {string} key - Storage key
+ * @param {*} defaultValue - Default value if not found
+ * @returns {*} Stored value or default
+ */
+function safeLocalStorageRead(key, defaultValue = []) {
+    try {
+        const stored = localStorage.getItem(key);
+        if (!stored) return defaultValue;
+        return JSON.parse(stored);
+    } catch (e) {
+        console.warn(`localStorage read failed for ${key}:`, e.message);
+        return defaultValue;
+    }
+}
+
 function addCustomPattern(pattern) {
-    const stored = JSON.parse(localStorage.getItem(AI_CONFIG.PATTERNS_KEY) || "[]");
+    const stored = safeLocalStorageRead(AI_CONFIG.PATTERNS_KEY, []);
     stored.push({
         ...pattern,
         id: `custom_${Date.now()}`,
         custom: true
     });
     
-    // Keep only recent patterns
-    if (stored.length > AI_CONFIG.MAX_PATTERNS) {
-        stored.splice(0, stored.length - AI_CONFIG.MAX_PATTERNS);
-    }
-    
-    localStorage.setItem(AI_CONFIG.PATTERNS_KEY, JSON.stringify(stored));
+    safeLocalStorageWrite(AI_CONFIG.PATTERNS_KEY, stored, AI_CONFIG.MAX_PATTERNS);
 }
 
 /**
@@ -1055,12 +1108,8 @@ function storeCorrection(original, correction, context = "") {
             timestamp: new Date().toISOString()
         });
         
-        // Keep only recent corrections
-        if (corrections.length > AI_CONFIG.MAX_CORRECTIONS) {
-            corrections.splice(0, corrections.length - AI_CONFIG.MAX_CORRECTIONS);
-        }
-        
-        localStorage.setItem(AI_CONFIG.CORRECTIONS_KEY, JSON.stringify(corrections));
+        // Use safe write with bounded history
+        safeLocalStorageWrite(AI_CONFIG.CORRECTIONS_KEY, corrections, AI_CONFIG.MAX_CORRECTIONS);
     }
 }
 
@@ -1069,11 +1118,7 @@ function storeCorrection(original, correction, context = "") {
  * @returns {Object[]} Array of corrections
  */
 function getStoredCorrections() {
-    try {
-        return JSON.parse(localStorage.getItem(AI_CONFIG.CORRECTIONS_KEY) || "[]");
-    } catch {
-        return [];
-    }
+    return safeLocalStorageRead(AI_CONFIG.CORRECTIONS_KEY, []);
 }
 
 /**
@@ -1247,6 +1292,80 @@ function enhancePrompt(userPrompt, dataContext) {
 }
 
 /**
+ * Extracts text from Gemini API response with robust traversal
+ * Handles multiple candidates and parts, safety filters, and errors
+ * @param {Object} data - Raw API response data
+ * @returns {Object} { text: string, error: string|null, blocked: boolean }
+ */
+function extractResponseText(data) {
+    // Check for safety/error fields first
+    if (data?.promptFeedback?.blockReason) {
+        return {
+            text: "",
+            error: `Request blocked: ${data.promptFeedback.blockReason}`,
+            blocked: true
+        };
+    }
+    
+    // Check if candidates exist
+    if (!data?.candidates || data.candidates.length === 0) {
+        return {
+            text: "",
+            error: "AI returned no content",
+            blocked: false
+        };
+    }
+    
+    // Iterate over candidates, prefer those with content
+    const allTextParts = [];
+    
+    for (const candidate of data.candidates) {
+        // Check for finish reason issues
+        if (candidate.finishReason === "SAFETY") {
+            return {
+                text: "",
+                error: "Response blocked due to safety filters",
+                blocked: true
+            };
+        }
+        
+        if (candidate.finishReason === "RECITATION") {
+            return {
+                text: "",
+                error: "Response blocked due to recitation concerns",
+                blocked: true
+            };
+        }
+        
+        // Extract text from all parts
+        if (candidate.content?.parts) {
+            for (const part of candidate.content.parts) {
+                if (part.text) {
+                    allTextParts.push(part.text);
+                }
+            }
+        }
+    }
+    
+    // Join all text segments
+    const combinedText = allTextParts.join("\n");
+    
+    if (!combinedText) {
+        return {
+            text: "",
+            error: "AI response contained no text",
+            blocked: false
+        };
+    }
+    
+    return {
+        text: combinedText,
+        error: null,
+        blocked: false
+    };
+}
+
+/**
  * Processes AI response and extracts any function calls
  * @param {string} response - AI response
  * @returns {Object} Processed response with actions
@@ -1314,6 +1433,11 @@ export {
     clearCorrections,
     handleCorrection,
     
-    // Main interface
-    processResponse
+    // Response processing
+    extractResponseText,
+    processResponse,
+    
+    // Storage utilities
+    safeLocalStorageWrite,
+    safeLocalStorageRead
 };

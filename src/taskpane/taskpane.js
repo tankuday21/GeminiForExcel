@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "3.0.2";
+const VERSION = "3.1.1";
 
 import {
     detectTaskType,
@@ -15,10 +15,39 @@ import {
     isCorrection,
     handleCorrection,
     processResponse,
+    extractResponseText,
     getRAGContext,
     getCorrectionContext,
     clearCorrections
 } from "./ai-engine.js";
+
+import {
+    colIndexToLetter,
+    colLetterToIndex,
+    buildDataContext as buildDataContextFromModule,
+    setupSelectionListener as setupSelectionListenerFromModule,
+    removeSelectionListener,
+    validateHeaders
+} from "./excel-data.js";
+
+import {
+    setDiagnosticLogger,
+    executeAction as executeActionFromModule,
+    adjustFormulaReferences
+} from "./action-executor.js";
+
+import {
+    initDiagnostics,
+    logInfo,
+    logWarn,
+    logError,
+    logDebug,
+    getLogs,
+    clearLogs,
+    toggleDebugMode,
+    isDebugMode,
+    renderDiagnosticsPanel
+} from "./diagnostics.js";
 
 const CONFIG = {
     GEMINI_MODEL: "gemini-2.0-flash",
@@ -41,6 +70,7 @@ const state = {
     lastAIResponse: "",      // Track last AI response for corrections
     currentTaskType: null,   // Track current task type
     worksheetScope: "single", // "single" or "all" - controls multi-sheet access
+    selectionHandler: null,  // Reference to selection change event handler
     // Preview state
     preview: {
         selections: [],      // boolean[] - selection state for each action
@@ -52,7 +82,10 @@ const state = {
         entries: [],         // HistoryEntry[] - all history entries, newest first
         panelVisible: false, // boolean - whether history panel is shown
         maxEntries: 20       // number - maximum entries to retain
-    }
+    },
+    // Diagnostics state
+    logs: [],                // Diagnostic log entries
+    diagnosticsPanelVisible: false
 };
 
 // ============================================================================
@@ -65,7 +98,36 @@ Office.onReady((info) => {
 });
 
 function initApp() {
-    state.apiKey = localStorage.getItem(CONFIG.STORAGE_KEY) || "";
+    // Initialize diagnostics system
+    initDiagnostics((logs) => {
+        state.logs = logs;
+        if (state.diagnosticsPanelVisible) {
+            updateDiagnosticsPanel();
+        }
+    });
+    
+    // Set up diagnostic logger for action executor
+    setDiagnosticLogger((msg) => logDebug(msg));
+    
+    logInfo("Excel Copilot initializing", { version: VERSION });
+    
+    // Comment 8: Load API key with de-obfuscation
+    // Note: Key is stored with basic obfuscation for backward compatibility
+    try {
+        const stored = localStorage.getItem(CONFIG.STORAGE_KEY) || "";
+        if (stored) {
+            // Try to decode (new format) or use as-is (old format)
+            try {
+                state.apiKey = atob(stored);
+            } catch (e) {
+                // Old format - use as-is
+                state.apiKey = stored;
+            }
+        }
+    } catch (e) {
+        state.apiKey = "";
+        logWarn("Could not load API key");
+    }
     
     // Update version badge and add click handler
     const versionBadge = document.getElementById("versionBadge");
@@ -89,7 +151,7 @@ function initApp() {
     bindEvents();
     initModeButtons();
     readExcelData().then(() => {
-        // Smart suggestions disabled for cleaner UI
+        logInfo("Initial data load complete");
     });
 }
 
@@ -129,20 +191,45 @@ function bindEvents() {
     
     document.getElementById("closeModal")?.addEventListener("click", closeModal);
     document.getElementById("cancelBtn")?.addEventListener("click", closeModal);
-    document.getElementById("saveBtn")?.addEventListener("click", () => {
+    document.getElementById("saveBtn")?.addEventListener("click", async () => {
         state.apiKey = document.getElementById("apiKeyInput").value.trim();
-        localStorage.setItem(CONFIG.STORAGE_KEY, state.apiKey);
+        
+        // Comment 8: Store API key with minimal obfuscation
+        // Note: For better security, consider not persisting at all
+        if (state.apiKey) {
+            // Simple base64 encoding (not true encryption, but prevents casual viewing)
+            const obfuscated = btoa(state.apiKey);
+            localStorage.setItem(CONFIG.STORAGE_KEY, obfuscated);
+        } else {
+            localStorage.removeItem(CONFIG.STORAGE_KEY);
+        }
         
         // Save worksheet scope preference
         const selectedScope = document.querySelector('input[name="worksheetScope"]:checked')?.value || "single";
+        const scopeChanged = state.worksheetScope !== selectedScope;
         state.worksheetScope = selectedScope;
         localStorage.setItem("excel_copilot_worksheet_scope", selectedScope);
         
+        // Comment 6: Re-attach selection listener and refresh data when scope changes
+        if (scopeChanged) {
+            await reattachSelectionListener();
+        }
+        
         // Refresh data to apply new scope
-        readExcelData();
+        await readExcelData();
         
         closeModal();
         toast("Saved");
+        logInfo("Settings saved", { scope: selectedScope });
+    });
+    
+    // Comment 8: Add "Remove API key" functionality
+    document.getElementById("removeApiKeyBtn")?.addEventListener("click", () => {
+        state.apiKey = "";
+        localStorage.removeItem(CONFIG.STORAGE_KEY);
+        document.getElementById("apiKeyInput").value = "";
+        toast("API key removed");
+        logInfo("API key removed");
     });
     
     document.getElementById("modal")?.addEventListener("click", (e) => {
@@ -159,6 +246,36 @@ function bindEvents() {
     // History and Undo buttons
     document.getElementById("historyBtn")?.addEventListener("click", toggleHistoryPanel);
     document.getElementById("undoBtn")?.addEventListener("click", performUndo);
+    
+    // Comment 10: Diagnostics panel buttons
+    document.getElementById("diagnosticsBtn")?.addEventListener("click", toggleDiagnosticsPanel);
+    document.getElementById("clearLogsBtn")?.addEventListener("click", () => {
+        clearLogs();
+        updateDiagnosticsPanel();
+        toast("Logs cleared");
+    });
+    document.getElementById("toggleDebugBtn")?.addEventListener("click", () => {
+        const newState = toggleDebugMode();
+        toast(newState ? "Debug mode enabled" : "Debug mode disabled");
+        updateDebugModeCheckbox();
+    });
+    document.getElementById("debugModeCheckbox")?.addEventListener("change", (e) => {
+        if (e.target.checked) {
+            toggleDebugMode();
+        } else {
+            toggleDebugMode();
+        }
+    });
+    
+    // Update buttons
+    document.getElementById("checkUpdateBtn")?.addEventListener("click", checkForUpdatesInSettings);
+    document.getElementById("updateNowBtn")?.addEventListener("click", performUpdate);
+    
+    // Update current version text when settings opens
+    document.getElementById("settingsBtn")?.addEventListener("click", () => {
+        const versionText = document.getElementById("currentVersionText");
+        if (versionText) versionText.textContent = `v${VERSION}`;
+    });
     
     // Theme toggle
     document.getElementById("themeBtn")?.addEventListener("click", toggleTheme);
@@ -192,27 +309,36 @@ function closeModal() {
 
 async function setupSelectionListener() {
     try {
+        // Remove existing handler if any (Comment 6)
+        if (state.selectionHandler) {
+            await removeSelectionListener(state.selectionHandler);
+            state.selectionHandler = null;
+        }
+        
         await Excel.run(async (ctx) => {
-            ctx.workbook.worksheets.getActiveWorksheet().onSelectionChanged.add(readExcelData);
+            const worksheet = ctx.workbook.worksheets.getActiveWorksheet();
+            state.selectionHandler = worksheet.onSelectionChanged.add(readExcelData);
             await ctx.sync();
+            logDebug("Selection listener attached");
         });
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+        // Log warning instead of silently ignoring (Comment 1)
+        console.warn("Could not attach selection listener:", e);
+        logWarn(`Selection listener failed: ${e.message}`);
+        toast("Selection auto-refresh unavailable");
+    }
 }
 
-// ============================================================================
-// Column Letter Helper
-// ============================================================================
-function colIndexToLetter(index) {
-    let letter = "";
-    while (index >= 0) {
-        letter = String.fromCharCode((index % 26) + 65) + letter;
-        index = Math.floor(index / 26) - 1;
-    }
-    return letter;
+/**
+ * Re-attaches selection listener (called when worksheet scope changes)
+ */
+async function reattachSelectionListener() {
+    await setupSelectionListener();
 }
 
 // ============================================================================
 // Read Excel Data with Column Headers
+// Note: colIndexToLetter and colLetterToIndex are imported from excel-data.js
 // ============================================================================
 async function readExcelData() {
     const infoEl = document.getElementById("contextInfo");
@@ -232,10 +358,12 @@ async function readExcelData() {
             activeSheet.load("name");
             await ctx.sync();
             
+            const activeSheetName = activeSheet.name;
+            
             // Determine which sheets to read
             const sheetsToRead = shouldReadAllSheets 
                 ? sheets.items.slice(0, 10) // All sheets (max 10)
-                : [sheets.items.find(s => s.name === activeSheet.name) || sheets.items[0]]; // Just active sheet
+                : [sheets.items.find(s => s.name === activeSheetName) || sheets.items[0]]; // Just active sheet
             
             for (const sheet of sheetsToRead) {
                 try {
@@ -251,14 +379,33 @@ async function readExcelData() {
                     const rowCount = usedRange.rowCount;
                     const colCount = usedRange.columnCount;
                     
-                    // Detect headers (first row)
-                    const headers = values[0] || [];
+                    // Comment 2: Handle empty sheets
+                    if (rowCount === 0 || !values || values.length === 0) {
+                        logDebug(`Sheet "${sheetName}" has no data, skipping`);
+                        continue;
+                    }
                     
-                    // Build column mapping
+                    // Comment 2: Guard for empty values array before reading headers
+                    if (values.length === 0) {
+                        logDebug(`Sheet "${sheetName}" has empty values array, skipping`);
+                        continue;
+                    }
+                    
+                    // Detect headers (first row) with validation (Comment 2)
+                    const headers = values[0] || [];
+                    const headerValidation = validateHeaders(headers);
+                    
+                    // Build column mapping with validated headers
                     const columnMap = [];
                     for (let c = 0; c < colCount; c++) {
                         const colLetter = colIndexToLetter(startCol + c);
-                        const headerName = headers[c] || `Column ${colLetter}`;
+                        let headerName;
+                        if (headerValidation.isValid && headers[c]) {
+                            headerName = headers[c];
+                        } else {
+                            // Use generic column names if headers don't look valid
+                            headerName = `Column ${colLetter}`;
+                        }
                         columnMap.push({
                             letter: colLetter,
                             index: c,
@@ -270,22 +417,34 @@ async function readExcelData() {
                         sheetName,
                         address: usedRange.address,
                         values,
-                        headers,
+                        headers: headerValidation.isValid ? headers : columnMap.map(c => c.header),
                         columnMap,
                         startRow: startRow + 1,
                         startCol: colIndexToLetter(startCol),
                         rowCount,
                         colCount,
-                        dataStartRow: startRow + 2
+                        dataStartRow: startRow + 2,
+                        headerValidation
                     });
                 } catch (e) {
-                    // Sheet might be empty, skip it
-                    console.warn(`Skipping sheet ${sheet.name}:`, e);
+                    // Sheet might be empty, log and skip it (Comment 1)
+                    const sheetName = sheet.name || "Unknown";
+                    console.warn(`Skipping sheet ${sheetName}:`, e);
+                    logWarn(`Failed to read sheet "${sheetName}": ${e.message}`);
                 }
             }
             
+            // Comment 2: Handle case where no sheets have usable data
+            if (allSheetsData.length === 0) {
+                state.currentData = null;
+                state.allSheetsData = [];
+                infoEl.textContent = "No usable data found in any sheet";
+                logWarn("No usable data found in any sheet");
+                return;
+            }
+            
             // Set current data to active sheet
-            const activeSheetData = allSheetsData.find(s => s.sheetName === activeSheet.name);
+            const activeSheetData = allSheetsData.find(s => s.sheetName === activeSheetName);
             state.currentData = activeSheetData || allSheetsData[0] || null;
             state.allSheetsData = shouldReadAllSheets ? allSheetsData : [];
             
@@ -297,9 +456,13 @@ async function readExcelData() {
             }
         });
     } catch (e) {
-        infoEl.textContent = "No data";
+        // Comment 1: Log actual error and show meaningful message
+        console.error("Failed to read Excel data:", e);
+        const errorReason = e.message || "Unknown error";
+        infoEl.textContent = `Failed to read data: ${errorReason.substring(0, 50)}`;
         state.currentData = null;
         state.allSheetsData = [];
+        logError(`readExcelData error: ${errorReason}`);
     }
 }
 
@@ -585,6 +748,108 @@ async function checkForUpdates() {
     }
 }
 
+// Store latest available version for update
+let latestAvailableVersion = null;
+
+/**
+ * Checks for updates from the settings modal
+ */
+async function checkForUpdatesInSettings() {
+    const checkBtn = document.getElementById("checkUpdateBtn");
+    const updateBtn = document.getElementById("updateNowBtn");
+    const statusEl = document.getElementById("updateStatus");
+    
+    const originalBtnText = checkBtn.innerHTML;
+    
+    try {
+        checkBtn.innerHTML = `<svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Checking...`;
+        checkBtn.disabled = true;
+        statusEl.className = "hint update-checking";
+        statusEl.textContent = "Checking for updates...";
+        
+        // Fetch the deployed taskpane.js with cache-busting
+        const response = await fetch(`https://tankuday21.github.io/GeminiForExcel/taskpane.js?t=${Date.now()}`);
+        const code = await response.text();
+        
+        // Extract version from the deployed code
+        const versionMatch = code.match(/const VERSION = "([^"]+)"/);
+        
+        if (versionMatch) {
+            const deployedVersion = versionMatch[1];
+            const currentVersion = VERSION;
+            
+            if (deployedVersion === currentVersion) {
+                statusEl.className = "hint";
+                statusEl.innerHTML = `✓ You're on the latest version (<strong>v${currentVersion}</strong>)`;
+                updateBtn.style.display = "none";
+                latestAvailableVersion = null;
+                toast("You're up to date!");
+            } else {
+                latestAvailableVersion = deployedVersion;
+                statusEl.className = "hint update-available";
+                statusEl.innerHTML = `Update available! <strong>v${currentVersion}</strong> → <strong>v${deployedVersion}</strong>`;
+                updateBtn.style.display = "inline-flex";
+                toast(`Update available: v${deployedVersion}`);
+                logInfo(`Update available: ${currentVersion} -> ${deployedVersion}`);
+            }
+        } else {
+            throw new Error("Could not parse version");
+        }
+    } catch (error) {
+        console.error("Update check failed:", error);
+        statusEl.className = "hint";
+        statusEl.textContent = `Failed to check for updates. Current: v${VERSION}`;
+        updateBtn.style.display = "none";
+        toast("Update check failed");
+        logError(`Update check failed: ${error.message}`);
+    } finally {
+        checkBtn.innerHTML = originalBtnText;
+        checkBtn.disabled = false;
+    }
+}
+
+/**
+ * Performs the update by reloading the add-in
+ */
+async function performUpdate() {
+    const updateBtn = document.getElementById("updateNowBtn");
+    const statusEl = document.getElementById("updateStatus");
+    
+    updateBtn.innerHTML = `<svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Updating...`;
+    updateBtn.disabled = true;
+    
+    try {
+        // Clear Office cache if possible
+        statusEl.textContent = "Clearing cache and reloading...";
+        
+        // Log the update attempt
+        logInfo(`Updating to v${latestAvailableVersion}`);
+        
+        // Clear any cached data
+        if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(name => caches.delete(name)));
+        }
+        
+        // Force reload the page to get the latest version
+        // The add-in will reload from the server with the new version
+        toast("Reloading add-in...");
+        
+        // Small delay to show the toast
+        setTimeout(() => {
+            window.location.reload(true);
+        }, 500);
+        
+    } catch (error) {
+        console.error("Update failed:", error);
+        statusEl.textContent = `Update failed: ${error.message}`;
+        updateBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> Retry Update`;
+        updateBtn.disabled = false;
+        toast("Update failed");
+        logError(`Update failed: ${error.message}`);
+    }
+}
+
 // ============================================================================
 // AI Communication
 // ============================================================================
@@ -599,8 +864,22 @@ async function handleSend() {
         return;
     }
     
-    // Always refresh data before sending to ensure latest data
-    await readExcelData();
+    // Comment 1: Separate readExcelData from AI call with specific error handling
+    try {
+        await readExcelData();
+    } catch (dataError) {
+        console.error("Failed to read Excel data:", dataError);
+        logError(`Data read failed: ${dataError.message}`);
+        addMessage("ai", "Could not load Excel data. Please ensure the workbook is open and the sheet has a used range.", "error");
+        toast("Data read failed");
+        return; // Short-circuit before AI call
+    }
+    
+    // Check if we have data to work with
+    if (!state.currentData) {
+        addMessage("ai", "No Excel data available. Please ensure your workbook has data in the active sheet.", "error");
+        return;
+    }
     
     // Clear conversation history in read-only mode to ensure fresh data context
     if (state.mode === "readonly") {
@@ -765,7 +1044,27 @@ async function callAI(userPrompt) {
         if (!res.ok) throw new Error(`API Error: ${res.status}`);
         
         const data = await res.json();
-        return data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response";
+        
+        // Comment 5: Use robust response extraction
+        const extracted = extractResponseText(data);
+        
+        if (extracted.error) {
+            logWarn(`AI response issue: ${extracted.error}`);
+            if (extracted.blocked) {
+                throw new Error(extracted.error);
+            }
+            // Show toast for empty responses
+            toast(extracted.error);
+            return extracted.error;
+        }
+        
+        if (!extracted.text) {
+            logWarn("AI returned no content");
+            toast("AI returned no content");
+            return "No response from AI";
+        }
+        
+        return extracted.text;
     });
     
     // Store response for potential correction learning
@@ -1586,6 +1885,51 @@ function toggleHistoryPanel() {
 }
 
 // ============================================================================
+// Comment 10: Diagnostics Panel Functions
+// ============================================================================
+
+/**
+ * Toggles diagnostics panel visibility
+ */
+function toggleDiagnosticsPanel() {
+    state.diagnosticsPanelVisible = !state.diagnosticsPanelVisible;
+    const panel = document.getElementById("diagnosticsPanel");
+    const btn = document.getElementById("diagnosticsBtn");
+    
+    if (panel) {
+        panel.style.display = state.diagnosticsPanelVisible ? "block" : "none";
+        if (state.diagnosticsPanelVisible) {
+            updateDiagnosticsPanel();
+        }
+    }
+    
+    if (btn) {
+        btn.classList.toggle("active", state.diagnosticsPanelVisible);
+    }
+}
+
+/**
+ * Updates the diagnostics panel content
+ */
+function updateDiagnosticsPanel() {
+    const list = document.getElementById("diagnosticsList");
+    if (!list) return;
+    
+    const logs = getLogs();
+    list.innerHTML = renderDiagnosticsPanel(logs.slice(0, 50));
+}
+
+/**
+ * Updates the debug mode checkbox state
+ */
+function updateDebugModeCheckbox() {
+    const checkbox = document.getElementById("debugModeCheckbox");
+    if (checkbox) {
+        checkbox.checked = isDebugMode();
+    }
+}
+
+// ============================================================================
 // Apply Actions
 // ============================================================================
 async function handleApply() {
@@ -1877,11 +2221,12 @@ async function applyFormula(range, formula) {
         for (let c = 0; c < cols; c++) {
             let f = formula;
             if (c > 0) {
-                // Adjust cell references for each column
+                // Comment 3: Use robust base-26 conversion for multi-letter columns
                 f = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (match, colAbs, col, rowAbs, row) => {
                     if (colAbs === "$") return match; // Skip absolute column references
-                    const colCode = col.charCodeAt(0);
-                    const newCol = String.fromCharCode(colCode + c);
+                    // Use colLetterToIndex and colIndexToLetter for multi-letter support
+                    const colIndex = colLetterToIndex(col);
+                    const newCol = colIndexToLetter(colIndex + c);
                     return `${colAbs}${newCol}${rowAbs}${row}`;
                 });
             }
@@ -1900,14 +2245,15 @@ async function applyFormula(range, formula) {
                 let f = formula;
                 // Adjust both row and column references
                 if (r > 0 || c > 0) {
+                    // Comment 3: Use robust base-26 conversion for multi-letter columns
                     f = formula.replace(/(\$?)([A-Z]+)(\$?)(\d+)/g, (match, colAbs, col, rowAbs, row) => {
                         let newCol = col;
                         let newRow = parseInt(row);
                         
-                        // Adjust column if not absolute
+                        // Adjust column if not absolute - use robust conversion
                         if (colAbs !== "$" && c > 0) {
-                            const colCode = col.charCodeAt(0);
-                            newCol = String.fromCharCode(colCode + c);
+                            const colIndex = colLetterToIndex(col);
+                            newCol = colIndexToLetter(colIndex + c);
                         }
                         
                         // Adjust row if not absolute
@@ -2167,12 +2513,15 @@ async function createChart(ctx, sheet, dataRange, action) {
     let chartDataRange = dataRange;
     const targetAddress = action.target;
     
-    // Check if target contains comma (non-contiguous) - not supported directly
+    // Comment 4: Check if target contains comma (non-contiguous) - not supported directly
     if (targetAddress && targetAddress.includes(",")) {
+        // Log warning and show user feedback
+        console.warn("Non-contiguous ranges not fully supported for charts, using first range only");
+        logWarn(`Chart: Non-contiguous range "${targetAddress}" - using first range only`);
+        toast("Non-contiguous ranges not supported for charts; only the first range was used");
+        
         // For non-contiguous ranges, we need to use the first range
-        // and add series manually, or use a contiguous subset
         const ranges = targetAddress.split(",").map(r => r.trim());
-        // Use the full data range if available, otherwise first range
         chartDataRange = sheet.getRange(ranges[0]);
     }
     

@@ -155,8 +155,8 @@ function renderHistoryList(entries, getIcon) {
     return entries.map(entry => renderHistoryEntry(entry, getIcon)).join('');
 }
 
-// Export for testing and use in main module
-module.exports = {
+// ES Module exports
+export {
     MAX_ENTRIES,
     generateId,
     createHistoryEntry,
@@ -168,3 +168,19 @@ module.exports = {
     renderHistoryEntry,
     renderHistoryList
 };
+
+// CommonJS exports for testing
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        MAX_ENTRIES,
+        generateId,
+        createHistoryEntry,
+        addToHistory,
+        removeFromHistory,
+        getLatestEntry,
+        hasHistory,
+        formatRelativeTime,
+        renderHistoryEntry,
+        renderHistoryList
+    };
+}

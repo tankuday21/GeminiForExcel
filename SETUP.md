@@ -26,6 +26,11 @@ npm run start
 ### 3. Configure API Key in Excel
 Click "AI Copilot" → Enter your API key when prompted
 
+**Security Note:** API keys are stored with basic obfuscation in browser storage. For maximum security:
+- Use the "Remove API Key" button in Settings when not actively using the add-in
+- Consider re-entering your API key each session rather than storing it
+- Never share your API key or workbooks that might contain stored keys
+
 ---
 
 ## Option B: Production Deployment (GitHub Pages - FREE)
@@ -105,6 +110,19 @@ When the AI suggests modifications, click "Apply Changes to Sheet" to execute th
 3. **Use quick actions** - They're optimized prompts for common tasks
 4. **Review before applying** - Always check the AI's suggestion before applying
 
+## Security
+
+### API Key Storage
+- API keys are stored with basic obfuscation (base64 encoding) in browser localStorage
+- This is NOT encryption - it only prevents casual viewing
+- For maximum security, use the "Remove API Key" button in Settings when done
+- You may need to re-enter your API key after clearing browser data
+
+### Removing Your API Key
+1. Open Settings (gear icon)
+2. Click "Remove API Key" button
+3. Your key will be cleared from storage immediately
+
 ## Troubleshooting
 
 ### Add-in doesn't load
@@ -120,6 +138,12 @@ When the AI suggests modifications, click "Apply Changes to Sheet" to execute th
 ### Changes not applying
 - Make sure you have a cell/range selected
 - Check the status bar for error messages
+- Open the Diagnostics panel (document icon) to see detailed logs
+
+### Debugging Issues
+1. Click the Diagnostics button (document icon) in the header
+2. Enable Debug Mode in Settings for more verbose logging
+3. Check the logs for specific error messages and skipped actions
 
 ## Development
 

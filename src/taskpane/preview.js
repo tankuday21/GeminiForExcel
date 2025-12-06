@@ -160,7 +160,8 @@ function renderPreviewList(actions, selections, expandedIndex, warningIndices = 
     }).join('');
 }
 
-module.exports = {
+// ES Module exports
+export {
     ACTION_TYPES,
     getActionIcon,
     getActionSummary,
@@ -170,3 +171,17 @@ module.exports = {
     renderPreviewItem,
     renderPreviewList
 };
+
+// CommonJS exports for testing
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        ACTION_TYPES,
+        getActionIcon,
+        getActionSummary,
+        getActionDetails,
+        filterSelectedActions,
+        hasSelectedActions,
+        renderPreviewItem,
+        renderPreviewList
+    };
+}

@@ -1862,3 +1862,153 @@ body {
     opacity: 0.4;
     cursor: not-allowed;
 }
+
+
+/* ============================================================================
+   Comment 10: Diagnostics Panel Styles
+   ============================================================================ */
+
+.diagnostics-panel {
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    margin: 0 16px 16px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.diagnostics-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+}
+
+.diagnostics-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.diagnostics-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.diagnostics-list {
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: ui-monospace, 'Consolas', monospace;
+    font-size: 11px;
+}
+
+.log-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.log-entry:last-child {
+    border-bottom: none;
+}
+
+.log-icon {
+    flex-shrink: 0;
+    font-size: 12px;
+}
+
+.log-message {
+    flex: 1;
+    color: var(--text);
+    word-break: break-word;
+}
+
+.log-time {
+    flex-shrink: 0;
+    color: var(--text-3);
+    font-size: 10px;
+}
+
+.log-data {
+    margin-top: 4px;
+    padding: 4px 8px;
+    background: var(--bg-alt);
+    border-radius: 4px;
+    font-size: 10px;
+    overflow-x: auto;
+    max-height: 100px;
+}
+
+.log-info .log-message { color: var(--text-2); }
+.log-warn .log-message { color: var(--warning); }
+.log-error .log-message { color: var(--error); }
+.log-debug .log-message { color: var(--primary); }
+
+.log-empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-3);
+    font-size: 12px;
+}
+
+/* Comment 8: Danger button for removing API key */
+.btn-danger {
+    border-color: var(--error);
+    color: var(--error);
+}
+
+.btn-danger:hover {
+    background: var(--error);
+    color: #fff;
+    border-color: var(--error);
+}
+
+
+/* Update Button Styles */
+.btn-update {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.btn-update svg {
+    flex-shrink: 0;
+}
+
+.btn-success {
+    background: var(--success);
+    color: #fff;
+    border-color: var(--success);
+}
+
+.btn-success:hover {
+    filter: brightness(0.9);
+}
+
+.update-available {
+    color: var(--success);
+    font-weight: 500;
+}
+
+.update-checking {
+    color: var(--text-3);
+    font-style: italic;
+}
+
+
+/* Spin animation for loading */
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
