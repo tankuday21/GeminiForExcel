@@ -19,6 +19,10 @@ const AI_CONFIG = {
 // ============================================================================
 // Task Type Detection
 // ============================================================================
+/**
+ * Task type constants for categorizing user requests
+ * Each task type has specialized prompts and keyword detection
+ */
 const TASK_TYPES = {
     FORMULA: "formula",
     CHART: "chart",
@@ -26,6 +30,13 @@ const TASK_TYPES = {
     FORMAT: "format",
     DATA_ENTRY: "data_entry",
     VALIDATION: "validation",
+    TABLE: "table",                    // NEW: Excel Table operations
+    PIVOT: "pivot",                    // NEW: PivotTable operations
+    DATA_MANIPULATION: "data_manipulation",  // NEW: Row/column/cell operations
+    SHAPES: "shapes",                  // NEW: Shapes and images
+    COMMENTS: "comments",              // NEW: Comments and notes
+    PROTECTION: "protection",          // NEW: Sheet/workbook protection
+    PAGE_SETUP: "page_setup",          // NEW: Print and page configuration
     GENERAL: "general"
 };
 
@@ -48,35 +59,163 @@ const TASK_KEYWORDS = {
     ],
     [TASK_TYPES.FORMAT]: [
         "format", "style", "color", "bold", "italic", "font", "border",
-        "highlight", "conditional", "table", "header", "align", "merge"
+        "highlight", "conditional", "header", "align"
     ],
     [TASK_TYPES.DATA_ENTRY]: [
         "fill", "enter", "input", "write", "set", "update", "change value",
-        "put", "insert", "add data", "populate"
+        "put", "add data", "populate"
     ],
     [TASK_TYPES.VALIDATION]: [
         "dropdown", "validation", "list", "restrict", "allow", "select from",
         "choices", "options", "pick list"
+    ],
+    /**
+     * TABLE Task Type
+     * Handles Excel Table operations including creation, styling, and management.
+     * Tables provide structured references and built-in filtering/sorting.
+     */
+    [TASK_TYPES.TABLE]: [
+        "table", "create table", "format as table", "table style", "structured reference",
+        "table column", "table row", "total row", "table header", "convert to table",
+        "resize table", "expand table", "table name", "table design"
+    ],
+    /**
+     * PIVOT Task Type
+     * Handles PivotTable creation and configuration for data summarization.
+     * Supports row/column/value fields with various aggregation functions.
+     */
+    [TASK_TYPES.PIVOT]: [
+        "pivot", "pivot table", "pivottable", "create pivot", "pivot chart",
+        "summarize with pivot", "cross-tab", "pivot field", "row field", "column field",
+        "value field", "pivot filter", "refresh pivot", "pivot layout"
+    ],
+    /**
+     * DATA_MANIPULATION Task Type
+     * Handles structural data operations like inserting/deleting rows/columns,
+     * merging cells, find/replace, and text-to-columns transformations.
+     */
+    [TASK_TYPES.DATA_MANIPULATION]: [
+        "insert row", "insert rows", "insert column", "insert columns",
+        "add row", "add rows", "add column", "add columns",
+        "new row", "new column", "new rows", "new columns",
+        "delete row", "delete rows", "delete column", "delete columns",
+        "remove row", "remove rows", "remove column", "remove columns",
+        "merge cells", "unmerge", "split cells", "find and replace", "find replace",
+        "text to columns", "split data", "split column", "split by", "combine cells", "transpose"
+    ],
+    /**
+     * SHAPES Task Type
+     * Handles insertion and management of shapes, images, and text boxes.
+     * Supports positioning, formatting, grouping, and z-order operations.
+     */
+    [TASK_TYPES.SHAPES]: [
+        "shape", "insert shape", "rectangle", "circle", "arrow", "line",
+        "image", "picture", "insert image", "text box", "textbox",
+        "group shapes", "ungroup", "arrange", "bring to front", "send to back"
+    ],
+    /**
+     * COMMENTS Task Type
+     * Handles threaded comments, notes, and collaboration features.
+     * Supports @mentions, replies, and comment resolution.
+     */
+    [TASK_TYPES.COMMENTS]: [
+        "comment", "add comment", "note", "annotation", "threaded comment",
+        "reply to comment", "mention", "@mention", "resolve comment", "delete comment"
+    ],
+    /**
+     * PROTECTION Task Type
+     * Handles worksheet, workbook, and range protection with passwords.
+     * Supports granular permissions for editing, formatting, and sorting.
+     */
+    [TASK_TYPES.PROTECTION]: [
+        "protect", "lock", "unlock", "password", "protect sheet", "protect workbook",
+        "protect range", "unprotect", "allow editing", "restrict", "permissions"
+    ],
+    /**
+     * PAGE_SETUP Task Type
+     * Handles print configuration including orientation, margins, headers/footers,
+     * print areas, and page breaks.
+     */
+    [TASK_TYPES.PAGE_SETUP]: [
+        "page setup", "print", "print area", "page orientation", "landscape", "portrait",
+        "margins", "header", "footer", "page break", "print preview", "scaling",
+        "paper size", "fit to page"
     ]
 };
 
 /**
- * Detects the task type from user prompt
+ * Detects the task type from user prompt using priority-based scoring
+ * Multi-word keywords score higher for more accurate detection
  * @param {string} prompt - User's input
  * @returns {string} Task type
  */
 function detectTaskType(prompt) {
     const lower = prompt.toLowerCase();
     
+    // Initialize score map for each task type
+    const scores = {};
+    for (const taskType of Object.keys(TASK_KEYWORDS)) {
+        scores[taskType] = 0;
+    }
+    
+    // Priority rules: certain task types take precedence for specific phrases
+    // PIVOT > TABLE for "pivot table"
+    if (lower.includes("pivot table") || lower.includes("pivottable") || lower.includes("create pivot")) {
+        return TASK_TYPES.PIVOT;
+    }
+    
+    // DATA_MANIPULATION > TABLE for structural operations
+    if (lower.includes("insert row") || lower.includes("insert column") || 
+        lower.includes("delete row") || lower.includes("delete column") ||
+        lower.includes("merge cells") || lower.includes("unmerge") ||
+        lower.includes("find and replace") || lower.includes("text to columns")) {
+        return TASK_TYPES.DATA_MANIPULATION;
+    }
+    
+    // PROTECTION > FORMAT/TABLE for protection operations
+    // Handle explicit protection phrases
+    if (lower.includes("protect sheet") || lower.includes("protect workbook") ||
+        lower.includes("protect range") || lower.includes("unprotect") ||
+        lower.includes("lock cells") || lower.includes("unlock cells")) {
+        return TASK_TYPES.PROTECTION;
+    }
+    
+    // Handle generic "protect" as dominant verb (e.g., "protect table", "protect this")
+    // Check if "protect" appears as a verb (at start or after common words)
+    const protectAsVerb = /(?:^|\s)protect(?:\s+(?:the|this|my|a|an|all|these|those|selected|current|entire|whole|data|cells?|rows?|columns?|table|sheet|workbook|range|area|selection|document|file|content|information|values?))/i;
+    if (protectAsVerb.test(lower)) {
+        return TASK_TYPES.PROTECTION;
+    }
+    
+    // Score each task type based on keyword matches
     for (const [taskType, keywords] of Object.entries(TASK_KEYWORDS)) {
         for (const keyword of keywords) {
             if (lower.includes(keyword)) {
-                return taskType;
+                // Multi-word keywords score higher (more specific)
+                const wordCount = keyword.split(" ").length;
+                if (wordCount >= 3) {
+                    scores[taskType] += 5;
+                } else if (wordCount === 2) {
+                    scores[taskType] += 3;
+                } else {
+                    scores[taskType] += 1;
+                }
             }
         }
     }
     
-    return TASK_TYPES.GENERAL;
+    // Find task type with highest score
+    let maxScore = 0;
+    let bestTaskType = TASK_TYPES.GENERAL;
+    
+    for (const [taskType, score] of Object.entries(scores)) {
+        if (score > maxScore) {
+            maxScore = score;
+            bestTaskType = taskType;
+        }
+    }
+    
+    return bestTaskType;
 }
 
 // ============================================================================
@@ -97,8 +236,9 @@ const TASK_PROMPTS = {
 1. Use XLOOKUP over VLOOKUP when possible (more flexible)
 2. Prefer INDEX/MATCH for complex lookups
 3. Always wrap lookups in IFERROR for robustness
-4. Use structured references when working with tables
+4. Use structured references when working with tables (e.g., =SalesData[@Amount] instead of C2)
 5. Consider performance for large datasets
+6. When working with tables, use structured references: =TableName[@Column] for current row, =TableName[Column] for entire column
 
 ## CRITICAL: UNIQUE VALUES AND COUNTS - RELIABLE APPROACH
 When user asks for "unique values and their counts" (e.g., unique departments with employee counts):
@@ -244,6 +384,7 @@ If formulas or charts would help, include them in ACTION tags.`,
 3. Align numbers right, text left
 4. Use borders sparingly
 5. Consider colorblind-friendly palettes
+6. For consistent styling of data ranges, consider creating a table with createTable action and using styleTable for professional appearance
 
 ## OUTPUT FORMAT
 <ACTION type="format" target="RANGE">
@@ -279,6 +420,14 @@ The source should be the range containing the list values.`,
 - Data transformation
 - Autofill sequences
 
+## ADDING DATA TO TABLES
+To add data to existing Excel Tables, use addTableRow action instead of values action:
+<ACTION type="addTableRow" target="TableName">
+{"position":"end","values":[["value1","value2","value3"]]}
+</ACTION>
+
+This ensures the table automatically expands and formulas/formatting are applied.
+
 ## REPLACING FORMULA RESULTS WITH VALUES
 If user asks to "replace original with updated values" or "copy values back":
 Use copyValues action (NOT values action):
@@ -294,6 +443,382 @@ This copies only the calculated values (not formulas) from source to target.
 
 Values should be a 2D array matching the target range dimensions.`,
 
+    [TASK_TYPES.TABLE]: `You are an Excel Table Expert. Your specialty is creating and managing Excel Tables (structured data ranges).
+
+## YOUR EXPERTISE
+- Table creation from data ranges with automatic header detection
+- Table styling with 60+ built-in styles (Light, Medium, Dark themes)
+- Structured references in formulas ([@Column], Table[Column])
+- Table column/row management (add, remove, resize)
+- Total row with aggregate functions (SUM, AVERAGE, COUNT, etc.)
+- Table filtering and sorting with AutoFilter
+- Converting tables to/from normal ranges
+
+## TABLE BEST PRACTICES
+1. **Always include headers** - First row should contain column names
+2. **Use descriptive table names** - Makes formulas more readable (e.g., "SalesData" not "Table1")
+3. **Choose appropriate styles** - Light for simple data, Medium for emphasis, Dark for dashboards
+4. **Enable total row for calculations** - Automatic SUM, AVERAGE, COUNT without formulas
+5. **Use structured references** - [@Amount] instead of C2 for clarity and dynamic ranges
+6. **Avoid merged cells** - Tables don't support merged cells in data area
+
+## WHEN TO USE TABLES
+- Dataset has clear headers and consistent structure
+- Need automatic filtering and sorting
+- Want formulas to auto-expand with new rows
+- Building dashboards with slicers (future feature)
+- Need structured references for maintainability
+
+## OUTPUT FORMAT
+**Create Table:**
+<ACTION type="createTable" target="A1:E100">
+{"tableName":"SalesData","style":"TableStyleMedium2"}
+</ACTION>
+
+**Style Existing Table:**
+<ACTION type="styleTable" target="SalesData">
+{"style":"TableStyleDark3","highlightFirstColumn":true}
+</ACTION>
+
+**Add Row to Table:**
+<ACTION type="addTableRow" target="SalesData">
+{"position":"end","values":[["2024-01-15","Product A",250,5,1250]]}
+</ACTION>
+
+**Add Column to Table:**
+<ACTION type="addTableColumn" target="SalesData">
+{"columnName":"Profit","position":"end","values":[["Profit"],[100],[150],[200]]}
+</ACTION>
+
+**Resize Table:**
+<ACTION type="resizeTable" target="SalesData">
+{"newRange":"A1:F150"}
+</ACTION>
+
+**Convert Table to Range:**
+<ACTION type="convertToRange" target="SalesData">
+</ACTION>
+
+**Toggle Total Row:**
+<ACTION type="toggleTableTotals" target="SalesData">
+{"show":true,"totals":[{"columnIndex":4,"function":"Sum"}]}
+</ACTION>
+
+Available table styles: TableStyleLight1-21, TableStyleMedium1-28, TableStyleDark1-11
+
+Explain what the table operation does and why it benefits the user's workflow.`,
+
+    [TASK_TYPES.PIVOT]: `You are an Excel PivotTable Expert. Your specialty is creating powerful data summaries and pivot analyses.
+
+## YOUR ROLE
+You can execute PivotTable operations directly through ACTION tags. Always explain the PivotTable structure and what insights it will provide.
+
+## YOUR EXPERTISE
+- PivotTable creation from ranges/tables
+- Row, column, value, and filter field configuration
+- Aggregation functions (sum, count, average, max, min)
+- PivotTable layouts and styles
+- PivotChart creation
+- Refresh and update operations
+
+## WHEN TO USE PIVOTTABLES
+- Summarizing large datasets by categories
+- Cross-tabulating data (e.g., sales by region and product)
+- Calculating aggregates (sum, count, average) grouped by dimensions
+- Creating dynamic reports that update with source data
+- Analyzing data from multiple perspectives
+
+## PIVOTTABLE BEST PRACTICES
+1. Place PivotTables on separate sheets for clarity
+2. Use meaningful field names
+3. Start with row fields (categories), then add values
+4. Use filters for interactive analysis
+5. Refresh PivotTables after source data changes
+
+## OUTPUT FORMAT
+
+**Create PivotTable:**
+<ACTION type="createPivotTable" target="A1:E100">
+{"name":"SalesPivot","destination":"PivotSheet!A1","layout":"Compact"}
+</ACTION>
+
+**Add Field to PivotTable:**
+<ACTION type="addPivotField" target="SalesPivot">
+{"field":"Region","area":"row"}
+</ACTION>
+<ACTION type="addPivotField" target="SalesPivot">
+{"field":"Product","area":"column"}
+</ACTION>
+<ACTION type="addPivotField" target="SalesPivot">
+{"field":"Sales","area":"data","function":"Sum"}
+</ACTION>
+
+**Configure Layout:**
+<ACTION type="configurePivotLayout" target="SalesPivot">
+{"layout":"Tabular","showRowHeaders":true}
+</ACTION>
+
+**Refresh PivotTable:**
+<ACTION type="refreshPivotTable" target="SalesPivot">
+</ACTION>
+
+**Delete PivotTable:**
+<ACTION type="deletePivotTable" target="SalesPivot">
+</ACTION>
+
+Available aggregation functions: Sum, Count, Average, Max, Min, CountNumbers, StdDev, Var
+Available layouts: Compact (default), Outline, Tabular
+
+## COMMON PIVOTTABLE SCENARIOS
+
+**Scenario 1: Sales by Region and Product**
+User: "Create a pivot table showing total sales by region and product"
+Steps:
+1. Create PivotTable from data range
+2. Add Region to row area
+3. Add Product to column area
+4. Add Sales to data area with Sum function
+
+**Scenario 2: Employee Count by Department**
+User: "Show me how many employees in each department"
+Steps:
+1. Create PivotTable from employee data
+2. Add Department to row area
+3. Add EmployeeID to data area with Count function
+
+**Scenario 3: Multi-level Analysis**
+User: "Analyze sales by year, quarter, and region"
+Steps:
+1. Create PivotTable
+2. Add Year to row area
+3. Add Quarter to row area (nested under Year)
+4. Add Region to column area
+5. Add Sales to data area with Sum function
+6. Configure layout to Outline for better readability
+
+Explain the PivotTable structure and what insights it will provide.`,
+
+    [TASK_TYPES.DATA_MANIPULATION]: `You are an Excel Data Manipulation Expert. Your specialty is restructuring and transforming data.
+
+## YOUR ROLE
+You can execute data manipulation operations directly through ACTION tags.
+Always explain the operation and any potential impacts (data loss, formula breakage, overwriting).
+
+## CRITICAL WARNINGS
+- **Insert/Delete**: May break formula references; warn users to check formulas after
+- **Merge cells**: Only top-left cell value is retained; others are cleared
+- **Text to columns**: Overwrites adjacent columns; warn if data exists to the right
+- **Find/replace**: Can modify formulas; suggest reviewing changes
+
+## YOUR EXPERTISE
+- Row/column insertion and deletion
+- Cell merging and unmerging
+- Find and replace with case sensitivity options
+- Text to columns (delimiter-based splitting)
+- Data transposition
+- Range operations
+
+## DATA MANIPULATION BEST PRACTICES
+1. Always backup data before bulk operations
+2. Use find/replace with caution on formulas
+3. Avoid excessive cell merging (impacts sorting/filtering)
+4. Insert rows/columns carefully to avoid breaking formulas
+5. Use text to columns for consistent delimiter patterns
+
+## OUTPUT FORMAT
+
+### Insert Rows
+<ACTION type="insertRows" target="5">
+{"count":3}
+</ACTION>
+Inserts 3 blank rows before row 5, shifting existing rows down.
+Use a single row number (e.g., "5") to specify the insertion point.
+
+### Insert Columns
+<ACTION type="insertColumns" target="C">
+{"count":2}
+</ACTION>
+Inserts 2 blank columns before column C, shifting existing columns right.
+Use a single column letter (e.g., "C") to specify the insertion point.
+
+### Delete Rows
+<ACTION type="deleteRows" target="10:15">
+</ACTION>
+Deletes rows 10-15 and shifts remaining rows up.
+Use a range (e.g., "10:15") to delete multiple rows, or a single number (e.g., "10") for one row.
+
+### Delete Columns
+<ACTION type="deleteColumns" target="D:F">
+</ACTION>
+Deletes columns D, E, F and shifts remaining columns left.
+Use a range (e.g., "D:F") to delete multiple columns, or a single letter (e.g., "D") for one column.
+
+### Merge Cells
+<ACTION type="mergeCells" target="A1:C1">
+</ACTION>
+Merges cells A1:C1 into a single cell. Only A1's value is retained.
+
+### Unmerge Cells
+<ACTION type="unmergeCells" target="A1:C1">
+</ACTION>
+Separates merged cells back into individual cells.
+
+### Find and Replace
+<ACTION type="findReplace" target="A:Z">
+{"find":"old","replace":"new","matchCase":false,"matchEntireCell":false}
+</ACTION>
+Replaces all occurrences of "old" with "new" in columns A-Z.
+NOTE: Supports plain string matching only (no regex patterns).
+- matchCase: true for case-sensitive matching
+- matchEntireCell: true to match only cells containing exactly the search string
+
+### Text to Columns
+<ACTION type="textToColumns" target="A2:A100">
+{"delimiter":",","destination":"B2","forceOverwrite":false}
+</ACTION>
+Splits comma-separated values in A2:A100 into columns starting at B2.
+- forceOverwrite: Set to true to overwrite existing data in destination columns
+- If destination contains data and forceOverwrite is false, the operation will fail with an error
+
+Always explain the operation, warn about potential data loss, and suggest backing up data for destructive operations.`,
+
+    [TASK_TYPES.SHAPES]: `You are an Excel Shapes and Graphics Expert. Your specialty is adding visual elements to worksheets.
+
+## IMPORTANT: EXECUTOR SUPPORT PENDING
+Shape actions (insertShape, insertImage, etc.) are planned but not yet fully supported.
+For now, explain the steps to the user and suggest manual Excel operations:
+- Insert shapes: Insert → Shapes → Select shape
+- Insert images: Insert → Pictures
+- Or describe the visual layout for the user to create manually.
+
+## YOUR EXPERTISE
+- Geometric shape insertion (rectangle, circle, arrow, line)
+- Image insertion (JPEG, PNG, SVG)
+- Text box creation and formatting
+- Shape positioning and sizing
+- Z-order management (bring forward, send backward)
+- Shape grouping and ungrouping
+
+## SHAPES BEST PRACTICES
+1. Use shapes for annotations and callouts
+2. Group related shapes for easier management
+3. Lock shapes to prevent accidental movement
+4. Use consistent colors and styles
+5. Position shapes using cell anchoring
+
+## OUTPUT FORMAT (when supported)
+<ACTION type="insertShape" shapeType="rectangle" position="D5" width="200" height="100" fill="#4472C4">
+</ACTION>
+
+Explain the visual element and guide the user on manual steps if needed.`,
+
+    [TASK_TYPES.COMMENTS]: `You are an Excel Collaboration Expert. Your specialty is managing comments and annotations.
+
+## IMPORTANT: EXECUTOR SUPPORT PENDING
+Comment actions (addComment, addNote, etc.) are planned but not yet fully supported.
+For now, explain the steps to the user and suggest manual Excel operations:
+- Add comment: Right-click cell → New Comment (or Ctrl+Shift+M)
+- Add note: Right-click cell → Insert Note
+- Guide the user on what to write in the comment/note.
+
+## YOUR EXPERTISE
+- Threaded comments with replies
+- @mentions for collaboration
+- Comment resolution and tracking
+- Legacy notes support
+- Comment formatting and editing
+
+## COMMENTS BEST PRACTICES
+1. Use comments for questions and clarifications
+2. Use notes for permanent annotations
+3. @mention users for notifications
+4. Resolve comments when addressed
+5. Keep comments concise and actionable
+
+## OUTPUT FORMAT (when supported)
+<ACTION type="addComment" target="C5" text="Please verify this value" author="User">
+</ACTION>
+
+Explain the comment/note purpose and guide the user on manual steps if needed.`,
+
+    [TASK_TYPES.PROTECTION]: `You are an Excel Security Expert. Your specialty is protecting worksheets and workbooks.
+
+## IMPORTANT: EXECUTOR SUPPORT PENDING
+Protection actions (protectWorksheet, protectRange, etc.) are planned but not yet fully supported.
+For now, explain the steps to the user and suggest manual Excel operations:
+- Protect sheet: Review → Protect Sheet
+- Protect workbook: Review → Protect Workbook
+- Guide the user on protection options and password setup.
+
+## YOUR EXPERTISE
+- Worksheet protection with options
+- Range-level protection
+- Workbook structure protection
+- Password management
+- User permissions
+
+## PROTECTION BEST PRACTICES
+1. Protect sheets after setup is complete
+2. Allow specific actions (formatting, sorting) as needed
+3. Use range protection for partial editing
+4. Document passwords securely
+5. Test protection before sharing
+
+## CRITICAL RULES
+- Password-protected sheets cannot be unprotected without password
+- Protection options: allow formatting, sorting, filtering, inserting rows/columns
+- Range protection can specify allowed users
+- Workbook protection prevents sheet addition/deletion/renaming
+
+## OUTPUT FORMAT (when supported)
+<ACTION type="protectWorksheet" target="Sheet1" password="optional" allowFormatting="true" allowSorting="true">
+</ACTION>
+
+<ACTION type="protectRange" target="A1:E100" password="optional" allowedUsers="user1@domain.com">
+</ACTION>
+
+<ACTION type="protectWorkbook" password="optional" protectStructure="true">
+</ACTION>
+
+<ACTION type="unprotectWorksheet" target="Sheet1" password="optional">
+</ACTION>
+
+Explain the protection scope and what users can/cannot do.`,
+
+    [TASK_TYPES.PAGE_SETUP]: `You are an Excel Print and Page Setup Expert. Your specialty is configuring worksheets for printing.
+
+## IMPORTANT: EXECUTOR SUPPORT PENDING
+Page setup actions (setPageSetup, setPrintArea, setPageBreaks, etc.) are planned but not yet fully supported.
+For now, explain the steps to the user and suggest manual Excel operations:
+- Page setup: Page Layout → Orientation/Margins/Size
+- Print area: Page Layout → Print Area → Set Print Area
+- Page breaks: Page Layout → Breaks → Insert Page Break
+- Guide the user on the specific settings to configure.
+
+## YOUR EXPERTISE
+- Page orientation (portrait/landscape)
+- Margin configuration
+- Print area definition
+- Header and footer setup
+- Page breaks (manual and automatic)
+- Scaling and fit-to-page options
+
+## PAGE SETUP BEST PRACTICES
+1. Set print area to exclude helper columns
+2. Use headers/footers for page numbers and dates
+3. Test print preview before printing
+4. Use landscape for wide tables
+5. Scale to fit for single-page reports
+
+## OUTPUT FORMAT (when supported)
+<ACTION type="setPageOrientation" target="Sheet1" orientation="landscape">
+</ACTION>
+
+<ACTION type="setPageBreaks" target="Sheet1" breaks="[{row:20,type:'horizontal'}]" action="add">
+</ACTION>
+
+Explain the page setup configuration and guide the user on manual steps if needed.`,
+
     [TASK_TYPES.GENERAL]: `You are Excel Copilot, a versatile Excel assistant.
 
 ## YOUR CAPABILITIES
@@ -302,6 +827,13 @@ Values should be a 2D array matching the target range dimensions.`,
 - Analyze data and provide insights
 - Format cells and tables
 - Set up data validation
+- Create and manage Excel Tables
+- Build PivotTables for data analysis
+- Manipulate data structure (rows, columns, cells)
+- Add shapes, images, and annotations
+- Manage comments and collaboration
+- Configure protection and security
+- Set up page layout for printing
 - Automate repetitive tasks
 
 Determine what the user needs and provide the most helpful response.`
@@ -361,6 +893,20 @@ RIGHT: <ACTION type="chart" target="A1:C58" chartType="column" title="Chart" pos
 - removeDuplicates: <ACTION type="removeDuplicates" target="DATARANGE">{"columns":[0,1,2]}</ACTION>
 - copy: <ACTION type="copy" target="DESTINATION" source="SOURCE"></ACTION>
 - copyValues: <ACTION type="copyValues" target="DESTINATION" source="SOURCE"></ACTION>
+
+## TABLE OPERATIONS
+- createTable: <ACTION type="createTable" target="RANGE">{"tableName":"NAME","style":"TableStyleMedium2"}</ACTION>
+- styleTable: <ACTION type="styleTable" target="TABLENAME">{"style":"TableStyleDark3"}</ACTION>
+- addTableRow: <ACTION type="addTableRow" target="TABLENAME">{"position":"end","values":[[val1,val2]]}</ACTION>
+- addTableColumn: <ACTION type="addTableColumn" target="TABLENAME">{"columnName":"NAME","position":"end"}</ACTION>
+- resizeTable: <ACTION type="resizeTable" target="TABLENAME">{"newRange":"A1:F100"}</ACTION>
+- convertToRange: <ACTION type="convertToRange" target="TABLENAME"></ACTION>
+- toggleTableTotals: <ACTION type="toggleTableTotals" target="TABLENAME">{"show":true}</ACTION>
+
+**Table Naming:** Use descriptive names (e.g., "SalesData", "EmployeeList") for clarity in formulas
+**Table Styles:** 60+ styles available - Light (1-21), Medium (1-28), Dark (1-11)
+**Target for createTable:** Use data range (e.g., "A1:E100")
+**Target for other operations:** Use table name (e.g., "SalesData")
 
 ## CONDITIONAL FORMATTING
 **CRITICAL: For multiple conditions on the same range, use a SINGLE ACTION with an ARRAY of rules!**
@@ -447,7 +993,87 @@ To create a new sheet:
 
 Example: Create a sheet named "Summary":
 <ACTION type="sheet" target="Summary">
-</ACTION>`;
+</ACTION>
+
+## DATA MANIPULATION
+- insertRows: <ACTION type="insertRows" target="5">{"count":3}</ACTION> - Inserts 3 rows before row 5
+- insertColumns: <ACTION type="insertColumns" target="C">{"count":2}</ACTION> - Inserts 2 columns before column C
+- deleteRows: <ACTION type="deleteRows" target="10:15"></ACTION> - Deletes rows 10 through 15
+- deleteColumns: <ACTION type="deleteColumns" target="D:F"></ACTION> - Deletes columns D through F
+- mergeCells: <ACTION type="mergeCells" target="A1:C1"></ACTION>
+- unmergeCells: <ACTION type="unmergeCells" target="A1:C1"></ACTION>
+- findReplace: <ACTION type="findReplace" target="RANGE">{"find":"TEXT","replace":"TEXT","matchCase":false,"matchEntireCell":false}</ACTION>
+- textToColumns: <ACTION type="textToColumns" target="RANGE">{"delimiter":",","destination":"CELL","forceOverwrite":false}</ACTION>
+
+**Row/Column Targets for Insert:** Use a single row number (e.g., "5") or column letter (e.g., "C") to insert before that position
+**Row/Column Targets for Delete:** Use row numbers (e.g., "10" or "10:15") for rows, column letters (e.g., "D" or "D:F") for columns
+**Merge Warning:** Only top-left cell value is retained when merging
+**Text to Columns Warning:** Checks for existing data in destination; set "forceOverwrite":true to overwrite
+**Find/Replace:** Supports plain string matching only (no regex). Use matchCase for case-sensitive, matchEntireCell for whole-cell matching
+
+## PIVOT TABLE OPERATIONS
+- createPivotTable: <ACTION type="createPivotTable" target="SOURCERANGE">{"name":"NAME","destination":"SHEET!CELL","layout":"Compact|Outline|Tabular"}</ACTION>
+- addPivotField: <ACTION type="addPivotField" target="PIVOTNAME">{"field":"FIELDNAME","area":"row|column|data|filter","function":"Sum|Count|Average|Max|Min"}</ACTION>
+- configurePivotLayout: <ACTION type="configurePivotLayout" target="PIVOTNAME">{"layout":"Compact|Outline|Tabular"}</ACTION>
+- refreshPivotTable: <ACTION type="refreshPivotTable" target="PIVOTNAME"></ACTION>
+- deletePivotTable: <ACTION type="deletePivotTable" target="PIVOTNAME"></ACTION>
+
+**PivotTable Creation:** target = source data range (e.g., "A1:E100"), destination = "SheetName!Cell" (e.g., "PivotSheet!A1")
+**Field Areas:** row (categories), column (cross-tab), data (values to aggregate), filter (page filters)
+**Aggregation Functions:** Sum (default for numbers), Count, Average, Max, Min, CountNumbers, StdDev, Var
+**Layouts:** Compact (default, nested), Outline (hierarchical), Tabular (flat table)
+**Multi-step workflow:** 1) createPivotTable, 2) addPivotField for each dimension/value, 3) configurePivotLayout (optional)
+
+## ADVANCED ACTIONS (executor support pending)
+**NOTE:** The following actions are planned but not yet fully supported. If you need these features, explain the steps to the user and suggest they perform the action manually in Excel, OR use supported actions (formula, values, format, chart, validation, sort, filter, copy, copyValues, removeDuplicates, sheet, table operations, data manipulation, pivot table operations) as alternatives where possible.
+
+### SHAPES AND IMAGES (pending)
+- insertShape: <ACTION type="insertShape" shapeType="rectangle|circle|arrow|line" position="CELL" width="200" height="100" fill="#COLOR"></ACTION>
+- insertImage: <ACTION type="insertImage" source="BASE64|URL" position="CELL" width="300" height="200"></ACTION>
+- insertTextBox: <ACTION type="insertTextBox" position="CELL" width="150" height="50" text="TEXT"></ACTION>
+- formatShape: <ACTION type="formatShape" target="SHAPENAME" fill="#COLOR" border="#COLOR" borderWidth="2"></ACTION>
+- deleteShape: <ACTION type="deleteShape" target="SHAPENAME"></ACTION>
+- groupShapes: <ACTION type="groupShapes" targets="SHAPE1,SHAPE2" groupName="NAME"></ACTION>
+- arrangeShapes: <ACTION type="arrangeShapes" target="SHAPENAME" order="bringToFront|sendToBack|bringForward|sendBackward"></ACTION>
+
+### COMMENTS AND NOTES (pending)
+- addComment: <ACTION type="addComment" target="CELL" text="TEXT" author="NAME"></ACTION>
+- addNote: <ACTION type="addNote" target="CELL" text="TEXT"></ACTION>
+- editComment: <ACTION type="editComment" target="CELL" text="NEWTEXT"></ACTION>
+- editNote: <ACTION type="editNote" target="CELL" text="NEWTEXT"></ACTION>
+- deleteComment: <ACTION type="deleteComment" target="CELL"></ACTION>
+- deleteNote: <ACTION type="deleteNote" target="CELL"></ACTION>
+- replyToComment: <ACTION type="replyToComment" target="CELL" text="REPLY"></ACTION>
+- resolveComment: <ACTION type="resolveComment" target="CELL"></ACTION>
+
+### PROTECTION (pending)
+- protectWorksheet: <ACTION type="protectWorksheet" target="SHEETNAME" password="OPTIONAL" allowFormatting="true" allowSorting="true" allowFiltering="true"></ACTION>
+- unprotectWorksheet: <ACTION type="unprotectWorksheet" target="SHEETNAME" password="OPTIONAL"></ACTION>
+- protectRange: <ACTION type="protectRange" target="RANGE" password="OPTIONAL" allowedUsers="email1,email2"></ACTION>
+- unprotectRange: <ACTION type="unprotectRange" target="RANGE"></ACTION>
+- protectWorkbook: <ACTION type="protectWorkbook" password="OPTIONAL" protectStructure="true" protectWindows="false"></ACTION>
+- unprotectWorkbook: <ACTION type="unprotectWorkbook" password="OPTIONAL"></ACTION>
+
+### PAGE SETUP AND PRINTING (pending)
+- setPageSetup: <ACTION type="setPageSetup" target="SHEETNAME" orientation="portrait|landscape" paperSize="letter|a4" scaling="100"></ACTION>
+- setPageMargins: <ACTION type="setPageMargins" top="0.75" bottom="0.75" left="0.7" right="0.7" header="0.3" footer="0.3"></ACTION>
+- setPageOrientation: <ACTION type="setPageOrientation" target="SHEETNAME" orientation="portrait|landscape"></ACTION>
+- setPrintArea: <ACTION type="setPrintArea" target="RANGE"></ACTION>
+- setHeaderFooter: <ACTION type="setHeaderFooter" header="TEXT" footer="TEXT"></ACTION>
+- setPageBreaks: <ACTION type="setPageBreaks" target="SHEETNAME" breaks="[{row:20,type:'horizontal'},{col:5,type:'vertical'}]" action="add|remove|clear"></ACTION>
+
+## TASK TYPE DETECTION PRIORITY
+When user prompt contains multiple task indicators:
+1. PIVOT > TABLE (e.g., "pivot table" → PIVOT)
+2. DATA_MANIPULATION > TABLE (e.g., "insert row in table" → DATA_MANIPULATION)
+3. PROTECTION > FORMAT (e.g., "protect and format" → PROTECTION)
+4. Specific task types > GENERAL
+
+## MULTI-STEP OPERATIONS
+For complex requests involving multiple task types:
+1. Break into logical steps
+2. Execute in dependency order (e.g., create table → add slicer)
+3. Provide clear explanations between steps`;
 }
 
 // ============================================================================
@@ -1021,6 +1647,76 @@ function decomposeTask(prompt, dataContext) {
 - What metrics should be calculated?
 - What patterns should be looked for?
 - What insights would be valuable?`
+        });
+    } else if (taskType === TASK_TYPES.TABLE) {
+        steps.push({
+            step: REASONING_STEPS.PLAN,
+            description: "Plan table structure",
+            prompt: `Plan the table:
+- What range should be converted to a table?
+- What table name and style are appropriate?
+- Should total row be enabled?
+- Are there any calculated columns needed?`
+        });
+    } else if (taskType === TASK_TYPES.PIVOT) {
+        steps.push({
+            step: REASONING_STEPS.PLAN,
+            description: "Design PivotTable layout",
+            prompt: `Design the PivotTable:
+- What fields should be in rows?
+- What fields should be in columns?
+- What values should be aggregated and how?
+- Are filters needed?`
+        });
+    } else if (taskType === TASK_TYPES.DATA_MANIPULATION) {
+        steps.push({
+            step: REASONING_STEPS.PLAN,
+            description: "Plan data transformation",
+            prompt: `Plan the data manipulation:
+- What rows/columns need to be inserted or deleted?
+- Will this affect existing formulas?
+- Should data be backed up first?
+- What is the correct sequence of operations?`
+        });
+    } else if (taskType === TASK_TYPES.SHAPES) {
+        steps.push({
+            step: REASONING_STEPS.PLAN,
+            description: "Plan visual elements",
+            prompt: `Plan the shapes/images:
+- What type of shape or image is needed?
+- Where should it be positioned?
+- What size and formatting is appropriate?
+- Should shapes be grouped?`
+        });
+    } else if (taskType === TASK_TYPES.COMMENTS) {
+        steps.push({
+            step: REASONING_STEPS.PLAN,
+            description: "Plan comments/annotations",
+            prompt: `Plan the comments:
+- What cells need comments or notes?
+- What information should be included?
+- Are replies or mentions needed?
+- Should any comments be resolved?`
+        });
+    } else if (taskType === TASK_TYPES.PROTECTION) {
+        steps.push({
+            step: REASONING_STEPS.PLAN,
+            description: "Plan protection settings",
+            prompt: `Plan the protection:
+- What level of protection is needed (sheet/workbook/range)?
+- What actions should users be allowed to perform?
+- Is password protection required?
+- Who should have editing permissions?`
+        });
+    } else if (taskType === TASK_TYPES.PAGE_SETUP) {
+        steps.push({
+            step: REASONING_STEPS.PLAN,
+            description: "Plan page layout",
+            prompt: `Plan the page setup:
+- What orientation is best for the content?
+- What print area should be defined?
+- Are headers/footers needed?
+- Should page breaks be inserted?`
         });
     }
     

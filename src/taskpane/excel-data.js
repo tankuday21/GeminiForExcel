@@ -119,6 +119,89 @@ async function readExcelData(state, updateContextInfo, logDiagnostic) {
                         });
                     }
                     
+                    // Detect PivotTables on this sheet (optimized with batched loads)
+                    const pivotTables = [];
+                    try {
+                        // First sync: load all PivotTables for this sheet
+                        sheet.pivotTables.load("items");
+                        await ctx.sync();
+                        
+                        if (sheet.pivotTables.items.length > 0) {
+                            // Second sync: batch load all PivotTable properties and hierarchy collections
+                            for (const pt of sheet.pivotTables.items) {
+                                pt.load(["name"]);
+                                pt.layout.load("layoutType");
+                                pt.rowHierarchies.load("items");
+                                pt.columnHierarchies.load("items");
+                                pt.dataHierarchies.load("items");
+                                pt.filterHierarchies.load("items");
+                            }
+                            await ctx.sync();
+                            
+                            // Third sync: batch load all hierarchy item properties
+                            for (const pt of sheet.pivotTables.items) {
+                                for (const h of pt.rowHierarchies.items) {
+                                    h.load("name");
+                                }
+                                for (const h of pt.columnHierarchies.items) {
+                                    h.load("name");
+                                }
+                                for (const h of pt.dataHierarchies.items) {
+                                    h.load(["name", "summarizeBy"]);
+                                }
+                                for (const h of pt.filterHierarchies.items) {
+                                    h.load("name");
+                                }
+                            }
+                            await ctx.sync();
+                            
+                            // Helper functions for enum to string conversion
+                            const getAggregationName = (summarizeBy) => {
+                                const aggMap = {
+                                    [Excel.AggregationFunction.sum]: "Sum",
+                                    [Excel.AggregationFunction.count]: "Count",
+                                    [Excel.AggregationFunction.average]: "Average",
+                                    [Excel.AggregationFunction.max]: "Max",
+                                    [Excel.AggregationFunction.min]: "Min",
+                                    [Excel.AggregationFunction.countNumbers]: "CountNumbers",
+                                    [Excel.AggregationFunction.standardDeviation]: "StdDev",
+                                    [Excel.AggregationFunction.variance]: "Var"
+                                };
+                                return aggMap[summarizeBy] || "Sum";
+                            };
+                            
+                            const getLayoutName = (layoutType) => {
+                                if (layoutType === Excel.PivotLayoutType.compact) return "Compact";
+                                if (layoutType === Excel.PivotLayoutType.outline) return "Outline";
+                                if (layoutType === Excel.PivotLayoutType.tabular) return "Tabular";
+                                return "Compact";
+                            };
+                            
+                            // Now extract data from already-loaded properties
+                            for (const pt of sheet.pivotTables.items) {
+                                try {
+                                    pivotTables.push({
+                                        name: pt.name,
+                                        layout: getLayoutName(pt.layout.layoutType),
+                                        rowFields: pt.rowHierarchies.items.map(h => h.name),
+                                        columnFields: pt.columnHierarchies.items.map(h => h.name),
+                                        dataFields: pt.dataHierarchies.items.map(h => ({ 
+                                            field: h.name, 
+                                            function: getAggregationName(h.summarizeBy) 
+                                        })),
+                                        filterFields: pt.filterHierarchies.items.map(h => h.name)
+                                    });
+                                    log(`Found PivotTable "${pt.name}" on sheet "${sheetName}"`);
+                                } catch (ptError) {
+                                    log(`Error reading PivotTable "${pt.name}" details: ${ptError.message}`);
+                                }
+                            }
+                        }
+                    } catch (pivotError) {
+                        // PivotTables not available or error reading them
+                        log(`Could not read PivotTables for sheet "${sheetName}": ${pivotError.message}`);
+                    }
+                    
                     allSheetsData.push({
                         sheetName,
                         address: usedRange.address,
@@ -130,10 +213,11 @@ async function readExcelData(state, updateContextInfo, logDiagnostic) {
                         rowCount,
                         colCount,
                         dataStartRow: startRow + 2,
-                        headerValidation
+                        headerValidation,
+                        pivotTables
                     });
                     
-                    log(`Read sheet "${sheetName}": ${rowCount} rows × ${colCount} cols`);
+                    log(`Read sheet "${sheetName}": ${rowCount} rows × ${colCount} cols, ${pivotTables.length} PivotTables`);
                 } catch (e) {
                     // Sheet might be empty, log and skip it
                     const sheetName = sheet.name || "Unknown";
@@ -332,6 +416,49 @@ function buildDataContext(state) {
             }
         }
         context += `\n**Note:** You can reference data from any sheet using sheet name (e.g., DeptManagers!A2:B10)\n`;
+    }
+    
+    // Add information about existing PivotTables
+    const allPivotTables = [];
+    
+    // Collect PivotTables from current sheet
+    if (state.currentData.pivotTables && state.currentData.pivotTables.length > 0) {
+        for (const pt of state.currentData.pivotTables) {
+            allPivotTables.push({ ...pt, sheetName: state.currentData.sheetName });
+        }
+    }
+    
+    // Collect PivotTables from other sheets
+    if (state.allSheetsData && state.allSheetsData.length > 0) {
+        for (const sheet of state.allSheetsData) {
+            if (sheet.sheetName === sheetName) continue; // Already added
+            if (sheet.pivotTables && sheet.pivotTables.length > 0) {
+                for (const pt of sheet.pivotTables) {
+                    allPivotTables.push({ ...pt, sheetName: sheet.sheetName });
+                }
+            }
+        }
+    }
+    
+    if (allPivotTables.length > 0) {
+        context += `\n## EXISTING PIVOTTABLES IN WORKBOOK\n`;
+        for (const pt of allPivotTables) {
+            context += `\n### ${pt.name} (on sheet "${pt.sheetName}")\n`;
+            context += `- Layout: ${pt.layout}\n`;
+            if (pt.rowFields.length > 0) {
+                context += `- Row Fields: ${pt.rowFields.join(", ")}\n`;
+            }
+            if (pt.columnFields.length > 0) {
+                context += `- Column Fields: ${pt.columnFields.join(", ")}\n`;
+            }
+            if (pt.dataFields.length > 0) {
+                context += `- Data Fields: ${pt.dataFields.map(d => `${d.function} of ${d.field}`).join(", ")}\n`;
+            }
+            if (pt.filterFields.length > 0) {
+                context += `- Filter Fields: ${pt.filterFields.join(", ")}\n`;
+            }
+        }
+        context += `\n**Note:** You can refresh existing PivotTables with refreshPivotTable action or create new ones with createPivotTable.\n`;
     }
     
     return context;

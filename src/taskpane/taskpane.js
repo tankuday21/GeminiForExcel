@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "3.1.2";
+const VERSION = "3.5.0";
 
 import {
     detectTaskType,
@@ -964,6 +964,13 @@ function showTaskTypeIndicator(taskType) {
         [TASK_TYPES.FORMAT]: "🎨 Format Mode",
         [TASK_TYPES.DATA_ENTRY]: "✏️ Data Entry Mode",
         [TASK_TYPES.VALIDATION]: "✅ Validation Mode",
+        [TASK_TYPES.TABLE]: "� TaGble Mode",
+        [TASK_TYPES.PIVOT]: "🔄 Pivot Mode",
+        [TASK_TYPES.DATA_MANIPULATION]: "✂️ Data Manipulation Mode",
+        [TASK_TYPES.SHAPES]: "🔷 Shapes Mode",
+        [TASK_TYPES.COMMENTS]: "💬 Comments Mode",
+        [TASK_TYPES.PROTECTION]: "🔒 Protection Mode",
+        [TASK_TYPES.PAGE_SETUP]: "📄 Page Setup Mode",
         [TASK_TYPES.GENERAL]: "💡 General Mode"
     };
     
@@ -996,6 +1003,13 @@ function getTaskTypeBadge(taskType) {
         [TASK_TYPES.FORMAT]: "**[Format]** ",
         [TASK_TYPES.DATA_ENTRY]: "**[Data]** ",
         [TASK_TYPES.VALIDATION]: "**[Validation]** ",
+        [TASK_TYPES.TABLE]: "**[Table]** ",
+        [TASK_TYPES.PIVOT]: "**[Pivot]** ",
+        [TASK_TYPES.DATA_MANIPULATION]: "**[Data]** ",
+        [TASK_TYPES.SHAPES]: "**[Shapes]** ",
+        [TASK_TYPES.COMMENTS]: "**[Comments]** ",
+        [TASK_TYPES.PROTECTION]: "**[Protection]** ",
+        [TASK_TYPES.PAGE_SETUP]: "**[Page Setup]** ",
         [TASK_TYPES.GENERAL]: ""
     };
     return badges[taskType] || "";
@@ -2014,9 +2028,33 @@ async function executeAction(ctx, sheet, action) {
     
     if (!target) throw new Error("No target specified");
     
-    const range = sheet.getRange(target);
-    range.load(["rowCount", "columnCount"]);
-    await ctx.sync();
+    // Actions that use logical names (table names, PivotTable names) instead of range addresses
+    // These should NOT pre-load a range as the target is not a valid range address
+    const logicalNameActions = [
+        "createPivotTable",      // target is source range, but handler resolves it
+        "addPivotField",         // target is PivotTable name
+        "configurePivotLayout",  // target is PivotTable name
+        "refreshPivotTable",     // target is PivotTable name
+        "deletePivotTable",      // target is PivotTable name
+        "styleTable",            // target is table name
+        "addTableRow",           // target is table name
+        "addTableColumn",        // target is table name
+        "resizeTable",           // target is table name
+        "convertToRange",        // target is table name
+        "toggleTableTotals",     // target is table name
+        "insertRows",            // target is row number, not range
+        "insertColumns",         // target is column letter, not range
+        "deleteRows",            // target is row range like "10:15"
+        "deleteColumns"          // target is column range like "D:F"
+    ];
+    
+    // Only pre-load range for actions that actually need it
+    let range = null;
+    if (!logicalNameActions.includes(type)) {
+        range = sheet.getRange(target);
+        range.load(["rowCount", "columnCount"]);
+        await ctx.sync();
+    }
     
     switch (type) {
         case "formula":
@@ -2084,6 +2122,86 @@ async function executeAction(ctx, sheet, action) {
             
         case "removeDuplicates":
             await removeDuplicates(ctx, range, data);
+            break;
+            
+        case "createTable":
+            await createTable(ctx, sheet, range, action);
+            break;
+            
+        case "styleTable":
+            await styleTable(ctx, sheet, target, data);
+            break;
+            
+        case "addTableRow":
+            await addTableRow(ctx, sheet, action);
+            break;
+            
+        case "addTableColumn":
+            await addTableColumn(ctx, sheet, action);
+            break;
+            
+        case "resizeTable":
+            await resizeTable(ctx, sheet, action);
+            break;
+            
+        case "convertToRange":
+            await convertToRange(ctx, sheet, target);
+            break;
+            
+        case "toggleTableTotals":
+            await toggleTableTotals(ctx, sheet, action);
+            break;
+            
+        case "insertRows":
+            await insertRows(ctx, sheet, action);
+            break;
+            
+        case "insertColumns":
+            await insertColumns(ctx, sheet, action);
+            break;
+            
+        case "deleteRows":
+            await deleteRows(ctx, sheet, action);
+            break;
+            
+        case "deleteColumns":
+            await deleteColumns(ctx, sheet, action);
+            break;
+            
+        case "mergeCells":
+            await mergeCells(ctx, sheet, action);
+            break;
+            
+        case "unmergeCells":
+            await unmergeCells(ctx, sheet, action);
+            break;
+            
+        case "findReplace":
+            await findReplace(ctx, sheet, action);
+            break;
+            
+        case "textToColumns":
+            await textToColumns(ctx, sheet, action);
+            break;
+            
+        case "createPivotTable":
+            await createPivotTable(ctx, sheet, action);
+            break;
+            
+        case "addPivotField":
+            await addPivotField(ctx, sheet, action);
+            break;
+            
+        case "configurePivotLayout":
+            await configurePivotLayout(ctx, sheet, action);
+            break;
+            
+        case "refreshPivotTable":
+            await refreshPivotTable(ctx, sheet, action);
+            break;
+            
+        case "deletePivotTable":
+            await deletePivotTable(ctx, sheet, action);
             break;
             
         default:
@@ -2842,4 +2960,1217 @@ async function removeDuplicates(ctx, range, data) {
     }
 }
 
-export { handleSend, handleApply, readExcelData, clearChat };
+// ============================================================================
+// Table Operations
+// ============================================================================
+
+/**
+ * Valid table styles for validation
+ */
+const VALID_TABLE_STYLES = [
+    // Light styles (1-21)
+    ...Array.from({ length: 21 }, (_, i) => `TableStyleLight${i + 1}`),
+    // Medium styles (1-28)
+    ...Array.from({ length: 28 }, (_, i) => `TableStyleMedium${i + 1}`),
+    // Dark styles (1-11)
+    ...Array.from({ length: 11 }, (_, i) => `TableStyleDark${i + 1}`)
+];
+
+/**
+ * Creates an Excel Table from a range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Excel.Range} range - Data range for the table
+ * @param {Object} action - Action with table options
+ */
+async function createTable(ctx, sheet, range, action) {
+    logDebug(`Starting createTable at range "${action.target}"`);
+    
+    let options = { tableName: null, style: "TableStyleMedium2" };
+    
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for createTable, using defaults`);
+        }
+    }
+    
+    // Validate style with clear error message
+    if (options.style && !VALID_TABLE_STYLES.includes(options.style)) {
+        logWarn(`Invalid table style "${options.style}". Valid styles: TableStyleLight1-21, TableStyleMedium1-28, TableStyleDark1-11. Using TableStyleMedium2.`);
+        options.style = "TableStyleMedium2";
+    }
+    
+    try {
+        // Create table with headers (true = first row is header)
+        const table = sheet.tables.add(range, true);
+        
+        // Set table name if provided
+        if (options.tableName) {
+            table.name = options.tableName;
+        }
+        
+        // Apply style
+        table.style = options.style;
+        
+        // Enable default table features
+        table.showBandedRows = true;
+        table.showFilterButton = true;
+        
+        await ctx.sync();
+        
+        const tableName = options.tableName || table.name;
+        logInfo(`Successfully created table "${tableName}" at ${action.target} with style ${options.style}`);
+    } catch (e) {
+        const errorMsg = e.message && e.message.includes("already") 
+            ? `Failed to create table: Range ${action.target} already contains a table or overlaps with one.`
+            : `Failed to create table at ${action.target}: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Applies styling to an existing table
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {string} tableName - Name of the table to style
+ * @param {string} data - JSON string with style options
+ */
+async function styleTable(ctx, sheet, tableName, data) {
+    logDebug(`Starting styleTable for table "${tableName}"`);
+    
+    let options = { style: "TableStyleMedium2" };
+    
+    if (data) {
+        try {
+            options = { ...options, ...JSON.parse(data) };
+        } catch (e) {
+            logWarn(`Failed to parse data for styleTable, using defaults`);
+        }
+    }
+    
+    // Validate style with clear error message
+    if (options.style && !VALID_TABLE_STYLES.includes(options.style)) {
+        logWarn(`Invalid table style "${options.style}". Valid styles: TableStyleLight1-21, TableStyleMedium1-28, TableStyleDark1-11. Using TableStyleMedium2.`);
+        options.style = "TableStyleMedium2";
+    }
+    
+    const table = sheet.tables.getItemOrNullObject(tableName);
+    table.load(["name", "isNullObject"]);
+    await ctx.sync();
+    
+    if (table.isNullObject) {
+        const errorMsg = `Table "${tableName}" not found on the active sheet.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        // Apply style
+        table.style = options.style;
+        
+        // Apply additional style options if provided
+        if (options.highlightFirstColumn !== undefined) {
+            table.highlightFirstColumn = options.highlightFirstColumn;
+        }
+        if (options.highlightLastColumn !== undefined) {
+            table.highlightLastColumn = options.highlightLastColumn;
+        }
+        if (options.showBandedRows !== undefined) {
+            table.showBandedRows = options.showBandedRows;
+        }
+        if (options.showBandedColumns !== undefined) {
+            table.showBandedColumns = options.showBandedColumns;
+        }
+        
+        await ctx.sync();
+        logInfo(`Successfully applied style "${options.style}" to table "${tableName}"`);
+    } catch (e) {
+        const errorMsg = `Failed to style table "${tableName}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Adds a row to an existing table
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with row options
+ */
+async function addTableRow(ctx, sheet, action) {
+    logDebug(`Starting addTableRow for target "${action.target}"`);
+    
+    let options = { tableName: action.target, position: "end", values: null };
+    
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for addTableRow, using defaults`);
+        }
+    }
+    
+    const tableName = options.tableName || action.target;
+    const table = sheet.tables.getItemOrNullObject(tableName);
+    table.load(["name", "isNullObject"]);
+    await ctx.sync();
+    
+    if (table.isNullObject) {
+        const errorMsg = `Table "${tableName}" not found on the active sheet.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    // Determine index: null for end, 0 for start, or specific number
+    let index = null;
+    if (options.position === "start" || options.position === 0) {
+        index = 0;
+    } else if (typeof options.position === "number" && options.position > 0) {
+        index = options.position;
+    }
+    // null means append to end
+    
+    // Prepare values - should be array of arrays
+    let rowValues = null;
+    if (options.values) {
+        rowValues = Array.isArray(options.values[0]) ? options.values : [options.values];
+    }
+    
+    try {
+        table.rows.add(index, rowValues);
+        await ctx.sync();
+        logInfo(`Successfully added row to table "${tableName}" at position ${options.position || "end"}`);
+    } catch (e) {
+        const errorMsg = `Failed to add row to table "${tableName}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Adds a column to an existing table
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with column options
+ */
+async function addTableColumn(ctx, sheet, action) {
+    logDebug(`Starting addTableColumn for target "${action.target}"`);
+    
+    let options = { tableName: action.target, columnName: "NewColumn", position: "end", values: null };
+    
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for addTableColumn, using defaults`);
+        }
+    }
+    
+    const tableName = options.tableName || action.target;
+    const table = sheet.tables.getItemOrNullObject(tableName);
+    table.load(["name", "isNullObject"]);
+    await ctx.sync();
+    
+    if (table.isNullObject) {
+        const errorMsg = `Table "${tableName}" not found on the active sheet.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    // Determine index: null for end, 0 for start, or specific number
+    let index = null;
+    if (options.position === "start" || options.position === 0) {
+        index = 0;
+    } else if (typeof options.position === "number" && options.position > 0) {
+        index = options.position;
+    }
+    
+    // Prepare values - should include header as first element
+    let columnValues = null;
+    if (options.values) {
+        columnValues = Array.isArray(options.values[0]) ? options.values : options.values.map(v => [v]);
+    } else if (options.columnName) {
+        // Just add header if no values provided
+        columnValues = [[options.columnName]];
+    }
+    
+    try {
+        table.columns.add(index, columnValues);
+        await ctx.sync();
+        logInfo(`Successfully added column "${options.columnName}" to table "${tableName}" at position ${options.position || "end"}`);
+    } catch (e) {
+        const errorMsg = `Failed to add column to table "${tableName}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Resizes an existing table to a new range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with resize options
+ */
+async function resizeTable(ctx, sheet, action) {
+    logDebug(`Starting resizeTable for target "${action.target}"`);
+    
+    let options = { tableName: action.target, newRange: null };
+    
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for resizeTable, using defaults`);
+        }
+    }
+    
+    const tableName = options.tableName || action.target;
+    
+    if (!options.newRange) {
+        const errorMsg = `newRange is required for resizeTable operation on table "${tableName}".`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    const table = sheet.tables.getItemOrNullObject(tableName);
+    table.load(["name", "isNullObject"]);
+    await ctx.sync();
+    
+    if (table.isNullObject) {
+        const errorMsg = `Table "${tableName}" not found on the active sheet.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    // Get current range for logging
+    const currentRange = table.getRange();
+    currentRange.load("address");
+    await ctx.sync();
+    
+    const oldAddress = currentRange.address;
+    
+    try {
+        // Resize the table
+        table.resize(options.newRange);
+        await ctx.sync();
+        logInfo(`Successfully resized table "${tableName}" from ${oldAddress} to ${options.newRange}`);
+    } catch (e) {
+        const errorMsg = `Failed to resize table "${tableName}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Converts a table back to a normal range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {string} tableName - Name of the table to convert
+ */
+async function convertToRange(ctx, sheet, tableName) {
+    logDebug(`Starting convertToRange for table "${tableName}"`);
+    
+    const table = sheet.tables.getItemOrNullObject(tableName);
+    table.load(["name", "isNullObject"]);
+    await ctx.sync();
+    
+    if (table.isNullObject) {
+        const errorMsg = `Table "${tableName}" not found on the active sheet.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        // Convert table to range - preserves data and formatting
+        table.convertToRange();
+        await ctx.sync();
+        logInfo(`Successfully converted table "${tableName}" to normal range`);
+    } catch (e) {
+        const errorMsg = `Failed to convert table "${tableName}" to range: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Toggles the total row for a table
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with totals options
+ */
+/**
+ * Valid totals calculation functions map
+ */
+const VALID_TOTALS_FUNCTIONS = {
+    "sum": Excel.TotalsCalculation.sum,
+    "average": Excel.TotalsCalculation.average,
+    "avg": Excel.TotalsCalculation.average,
+    "count": Excel.TotalsCalculation.count,
+    "countnumbers": Excel.TotalsCalculation.countNumbers,
+    "max": Excel.TotalsCalculation.max,
+    "min": Excel.TotalsCalculation.min,
+    "stddev": Excel.TotalsCalculation.stdDev,
+    "var": Excel.TotalsCalculation.var,
+    "none": Excel.TotalsCalculation.none
+};
+
+async function toggleTableTotals(ctx, sheet, action) {
+    logDebug(`Starting toggleTableTotals for target "${action.target}"`);
+    
+    let options = { tableName: action.target, show: true, totals: null };
+    
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for toggleTableTotals, using defaults`);
+        }
+    }
+    
+    const tableName = options.tableName || action.target;
+    const table = sheet.tables.getItemOrNullObject(tableName);
+    table.load(["name", "isNullObject"]);
+    await ctx.sync();
+    
+    if (table.isNullObject) {
+        const errorMsg = `Table "${tableName}" not found on the active sheet.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    // Toggle totals row visibility
+    table.showTotals = options.show;
+    await ctx.sync();
+    
+    logDebug(`Set showTotals=${options.show} for table "${tableName}"`);
+    
+    // If enabling totals and specific functions are requested, apply them
+    const appliedFunctions = [];
+    if (options.show && options.totals && Array.isArray(options.totals) && options.totals.length > 0) {
+        table.columns.load("count");
+        await ctx.sync();
+        
+        const columnCount = table.columns.count;
+        
+        for (const totalConfig of options.totals) {
+            // Validate columnIndex
+            if (totalConfig.columnIndex === undefined || totalConfig.columnIndex === null) {
+                logWarn(`Skipping totals config - missing columnIndex`);
+                continue;
+            }
+            
+            if (typeof totalConfig.columnIndex !== "number" || totalConfig.columnIndex < 0) {
+                logWarn(`Skipping totals config - invalid columnIndex "${totalConfig.columnIndex}"`);
+                continue;
+            }
+            
+            if (totalConfig.columnIndex >= columnCount) {
+                logWarn(`Skipping totals config - columnIndex ${totalConfig.columnIndex} exceeds table column count ${columnCount}`);
+                continue;
+            }
+            
+            // Validate function name
+            if (!totalConfig.function) {
+                logWarn(`Skipping totals config for column ${totalConfig.columnIndex} - missing function`);
+                continue;
+            }
+            
+            const funcName = String(totalConfig.function).toLowerCase().replace(/\s/g, "");
+            const calcFunc = VALID_TOTALS_FUNCTIONS[funcName];
+            
+            if (!calcFunc) {
+                logWarn(`Invalid totals function "${totalConfig.function}" for column ${totalConfig.columnIndex}. Valid functions: Sum, Average, Count, Max, Min, StdDev, Var, None`);
+                continue;
+            }
+            
+            try {
+                const column = table.columns.getItemAt(totalConfig.columnIndex);
+                column.totalsCalculation = calcFunc;
+                appliedFunctions.push(`column ${totalConfig.columnIndex}: ${totalConfig.function}`);
+            } catch (e) {
+                logWarn(`Failed to apply ${totalConfig.function} to column ${totalConfig.columnIndex}: ${e.message}`);
+            }
+        }
+        
+        await ctx.sync();
+    }
+    
+    if (appliedFunctions.length > 0) {
+        logInfo(`Applied totals functions for table "${tableName}": ${appliedFunctions.join(", ")}`);
+    }
+    
+    logInfo(`Completed toggleTableTotals for table "${tableName}": show=${options.show}`);
+}
+
+// ============================================================================
+// Data Manipulation Operations
+// ============================================================================
+
+/**
+ * Inserts rows at the specified position
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with row options
+ */
+async function insertRows(ctx, sheet, action) {
+    logDebug(`Starting insertRows for target "${action.target}"`);
+    
+    let options = { count: 1 };
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for insertRows, using defaults`);
+        }
+    }
+    
+    // Validate target is a row range (e.g., "5" or "5:7")
+    const rowPattern = /^(\d+)(:\d+)?$/;
+    if (!rowPattern.test(action.target)) {
+        const errorMsg = `Invalid row range "${action.target}". Use format "5" or "5:7".`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    // Validate count
+    if (typeof options.count !== "number" || options.count < 1) {
+        logWarn(`Invalid count "${options.count}", using 1`);
+        options.count = 1;
+    }
+    
+    try {
+        const range = sheet.getRange(`${action.target}:${action.target}`);
+        const entireRow = range.getEntireRow();
+        
+        // Insert rows multiple times if count > 1
+        for (let i = 0; i < options.count; i++) {
+            entireRow.insert(Excel.InsertShiftDirection.down);
+        }
+        
+        await ctx.sync();
+        logInfo(`Successfully inserted ${options.count} row(s) at row ${action.target}`);
+    } catch (e) {
+        const errorMsg = `Failed to insert rows at "${action.target}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Inserts columns at the specified position
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with column options
+ */
+async function insertColumns(ctx, sheet, action) {
+    logDebug(`Starting insertColumns for target "${action.target}"`);
+    
+    let options = { count: 1 };
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for insertColumns, using defaults`);
+        }
+    }
+    
+    // Validate target is a column range (e.g., "C" or "C:E")
+    const colPattern = /^([A-Z]+)(:[A-Z]+)?$/i;
+    if (!colPattern.test(action.target)) {
+        const errorMsg = `Invalid column range "${action.target}". Use format "C" or "C:E".`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    // Validate count
+    if (typeof options.count !== "number" || options.count < 1) {
+        logWarn(`Invalid count "${options.count}", using 1`);
+        options.count = 1;
+    }
+    
+    try {
+        const range = sheet.getRange(`${action.target}:${action.target}`);
+        const entireColumn = range.getEntireColumn();
+        
+        // Insert columns multiple times if count > 1
+        for (let i = 0; i < options.count; i++) {
+            entireColumn.insert(Excel.InsertShiftDirection.right);
+        }
+        
+        await ctx.sync();
+        logInfo(`Successfully inserted ${options.count} column(s) at column ${action.target}`);
+    } catch (e) {
+        const errorMsg = `Failed to insert columns at "${action.target}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Deletes rows at the specified position
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with row options
+ */
+async function deleteRows(ctx, sheet, action) {
+    logDebug(`Starting deleteRows for target "${action.target}"`);
+    
+    // Validate target is a row range (e.g., "10" or "10:15")
+    const rowPattern = /^(\d+)(:\d+)?$/;
+    if (!rowPattern.test(action.target)) {
+        const errorMsg = `Invalid row range "${action.target}". Use format "10" or "10:15".`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        const range = sheet.getRange(`${action.target}:${action.target}`);
+        const entireRow = range.getEntireRow();
+        entireRow.delete(Excel.DeleteShiftDirection.up);
+        
+        await ctx.sync();
+        logInfo(`Successfully deleted row(s) at ${action.target}. Warning: This may affect formula references.`);
+    } catch (e) {
+        const errorMsg = `Failed to delete rows at "${action.target}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Deletes columns at the specified position
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with column options
+ */
+async function deleteColumns(ctx, sheet, action) {
+    logDebug(`Starting deleteColumns for target "${action.target}"`);
+    
+    // Validate target is a column range (e.g., "D" or "D:F")
+    const colPattern = /^([A-Z]+)(:[A-Z]+)?$/i;
+    if (!colPattern.test(action.target)) {
+        const errorMsg = `Invalid column range "${action.target}". Use format "D" or "D:F".`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        const range = sheet.getRange(`${action.target}:${action.target}`);
+        const entireColumn = range.getEntireColumn();
+        entireColumn.delete(Excel.DeleteShiftDirection.left);
+        
+        await ctx.sync();
+        logInfo(`Successfully deleted column(s) at ${action.target}. Warning: This may affect formula references.`);
+    } catch (e) {
+        const errorMsg = `Failed to delete columns at "${action.target}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Merges cells in the specified range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with merge options
+ */
+async function mergeCells(ctx, sheet, action) {
+    logDebug(`Starting mergeCells for target "${action.target}"`);
+    
+    try {
+        const range = sheet.getRange(action.target);
+        range.load(["address", "rowCount", "columnCount"]);
+        await ctx.sync();
+        
+        // Validate range is at least 2 cells
+        if (range.rowCount === 1 && range.columnCount === 1) {
+            const errorMsg = `Cannot merge a single cell. Range must contain at least 2 cells.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        range.merge(false);
+        await ctx.sync();
+        
+        logInfo(`Successfully merged cells at ${action.target}. Note: Only the top-left cell value is retained.`);
+    } catch (e) {
+        if (e.message && e.message.includes("merge")) {
+            const errorMsg = `Failed to merge cells at "${action.target}": Range may already contain merged cells.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        const errorMsg = `Failed to merge cells at "${action.target}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Unmerges cells in the specified range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with unmerge options
+ */
+async function unmergeCells(ctx, sheet, action) {
+    logDebug(`Starting unmergeCells for target "${action.target}"`);
+    
+    try {
+        const range = sheet.getRange(action.target);
+        range.unmerge();
+        await ctx.sync();
+        
+        logInfo(`Successfully unmerged cells at ${action.target}`);
+    } catch (e) {
+        const errorMsg = `Failed to unmerge cells at "${action.target}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Finds and replaces text in the specified range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with find/replace options
+ */
+async function findReplace(ctx, sheet, action) {
+    logDebug(`Starting findReplace for target "${action.target}"`);
+    
+    let options = { find: "", replace: "", matchCase: false, matchEntireCell: false };
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for findReplace`);
+        }
+    }
+    
+    // Validate find string
+    if (!options.find || options.find.length === 0) {
+        const errorMsg = `Find string cannot be empty.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        const range = sheet.getRange(action.target);
+        
+        const searchCriteria = {
+            completeMatch: options.matchEntireCell,
+            matchCase: options.matchCase
+        };
+        
+        range.replaceAll(options.find, options.replace || "", searchCriteria);
+        await ctx.sync();
+        
+        logInfo(`Successfully replaced "${options.find}" with "${options.replace}" in ${action.target}`);
+    } catch (e) {
+        const errorMsg = `Failed to find/replace in "${action.target}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Splits text in a column into multiple columns based on delimiter
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with text-to-columns options
+ */
+async function textToColumns(ctx, sheet, action) {
+    logDebug(`Starting textToColumns for target "${action.target}"`);
+    
+    let options = { delimiter: ",", destination: null };
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for textToColumns, using defaults`);
+        }
+    }
+    
+    try {
+        const sourceRange = sheet.getRange(action.target);
+        sourceRange.load(["values", "rowCount", "columnCount", "columnIndex", "rowIndex"]);
+        await ctx.sync();
+        
+        // Validate source is single column
+        if (sourceRange.columnCount !== 1) {
+            const errorMsg = `Text to columns requires a single-column range. Got ${sourceRange.columnCount} columns.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        const values = sourceRange.values;
+        const delimiter = options.delimiter || ",";
+        
+        // Split each cell value
+        const splitData = [];
+        let maxColumns = 0;
+        
+        for (const row of values) {
+            const cellValue = row[0];
+            const parts = cellValue !== null && cellValue !== undefined 
+                ? String(cellValue).split(delimiter) 
+                : [""];
+            splitData.push(parts);
+            maxColumns = Math.max(maxColumns, parts.length);
+        }
+        
+        // Pad arrays to same length
+        for (const row of splitData) {
+            while (row.length < maxColumns) {
+                row.push("");
+            }
+        }
+        
+        // Determine destination
+        let destRange;
+        if (options.destination) {
+            destRange = sheet.getRange(options.destination);
+            destRange = destRange.getResizedRange(splitData.length - 1, maxColumns - 1);
+        } else {
+            // Use columns immediately to the right of source
+            const destStartCol = sourceRange.columnIndex + 1;
+            destRange = sheet.getRangeByIndexes(
+                sourceRange.rowIndex,
+                destStartCol,
+                splitData.length,
+                maxColumns
+            );
+        }
+        
+        destRange.values = splitData;
+        await ctx.sync();
+        
+        logInfo(`Successfully split ${values.length} cells into ${maxColumns} columns. Warning: Adjacent data may have been overwritten.`);
+    } catch (e) {
+        const errorMsg = `Failed to split text to columns for "${action.target}": ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+// ============================================================================
+// PivotTable Operations
+// ============================================================================
+
+/**
+ * Creates a PivotTable from a data range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with PivotTable options
+ */
+async function createPivotTable(ctx, sheet, action) {
+    logDebug(`Starting createPivotTable for target "${action.target}"`);
+    
+    let options = { name: null, destination: null, layout: null };
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for createPivotTable`);
+        }
+    }
+    
+    // Validate required fields
+    if (!options.name) {
+        const errorMsg = `PivotTable name is required.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    if (!options.destination) {
+        const errorMsg = `Destination is required (e.g., "PivotSheet!A1").`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        // Parse destination into sheet name and cell
+        let destSheetName, destCell;
+        if (options.destination.includes("!")) {
+            const parts = options.destination.split("!");
+            destSheetName = parts[0];
+            destCell = parts[1];
+        } else {
+            destSheetName = sheet.name;
+            destCell = options.destination;
+        }
+        
+        // Get or create destination sheet
+        let destSheet = ctx.workbook.worksheets.getItemOrNullObject(destSheetName);
+        await ctx.sync();
+        
+        if (destSheet.isNullObject) {
+            logDebug(`Creating new sheet "${destSheetName}" for PivotTable`);
+            destSheet = ctx.workbook.worksheets.add(destSheetName);
+            await ctx.sync();
+        }
+        
+        // Get source range - could be a range address or table name
+        let sourceRange;
+        const source = action.target;
+        
+        // Check if source is a table name (no colon in address)
+        if (source && !source.includes(":") && !source.match(/^[A-Z]+\d+$/i)) {
+            // Try to get as table
+            const table = sheet.tables.getItemOrNullObject(source);
+            table.load("isNullObject");
+            await ctx.sync();
+            
+            if (!table.isNullObject) {
+                sourceRange = table.getRange();
+                logDebug(`Using table "${source}" as PivotTable source`);
+            } else {
+                sourceRange = sheet.getRange(source);
+            }
+        } else {
+            sourceRange = sheet.getRange(source);
+        }
+        
+        // Get destination range
+        const destRange = destSheet.getRange(destCell);
+        
+        // Create PivotTable
+        const pivotTable = destSheet.pivotTables.add(options.name, sourceRange, destRange);
+        
+        // Set layout if specified
+        if (options.layout) {
+            const layoutType = options.layout.toLowerCase();
+            if (layoutType === "compact") {
+                pivotTable.layout.layoutType = Excel.PivotLayoutType.compact;
+            } else if (layoutType === "outline") {
+                pivotTable.layout.layoutType = Excel.PivotLayoutType.outline;
+            } else if (layoutType === "tabular") {
+                pivotTable.layout.layoutType = Excel.PivotLayoutType.tabular;
+            }
+        }
+        
+        await ctx.sync();
+        logInfo(`Successfully created PivotTable "${options.name}" from ${source} to ${options.destination}`);
+    } catch (e) {
+        const errorMsg = `Failed to create PivotTable: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Adds a field to a PivotTable
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with field options
+ */
+async function addPivotField(ctx, sheet, action) {
+    logDebug(`Starting addPivotField for target "${action.target}"`);
+    
+    let options = { pivotName: action.target, field: null, area: null, function: "Sum" };
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for addPivotField`);
+        }
+    }
+    
+    const pivotName = options.pivotName || action.target;
+    
+    // Validate required fields
+    if (!options.field) {
+        const errorMsg = `Field name is required.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    if (!options.area) {
+        const errorMsg = `Area is required (row, column, data, or filter).`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        // Search for PivotTable in all sheets
+        const sheets = ctx.workbook.worksheets;
+        sheets.load("items");
+        await ctx.sync();
+        
+        let pivotTable = null;
+        for (const ws of sheets.items) {
+            const pt = ws.pivotTables.getItemOrNullObject(pivotName);
+            pt.load("isNullObject");
+            await ctx.sync();
+            
+            if (!pt.isNullObject) {
+                pivotTable = pt;
+                break;
+            }
+        }
+        
+        if (!pivotTable) {
+            const errorMsg = `PivotTable "${pivotName}" not found.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        // Get the hierarchy for the field
+        const hierarchy = pivotTable.hierarchies.getItem(options.field);
+        
+        // Add to appropriate area
+        const area = options.area.toLowerCase();
+        if (area === "row") {
+            pivotTable.rowHierarchies.add(hierarchy);
+            logDebug(`Added field "${options.field}" to row area of PivotTable "${pivotName}"`);
+        } else if (area === "column") {
+            pivotTable.columnHierarchies.add(hierarchy);
+            logDebug(`Added field "${options.field}" to column area of PivotTable "${pivotName}"`);
+        } else if (area === "data" || area === "value" || area === "values") {
+            const dataHierarchy = pivotTable.dataHierarchies.add(hierarchy);
+            
+            // Set aggregation function with validation
+            const rawFuncName = options.function || "Sum";
+            const funcName = rawFuncName.toLowerCase().replace(/_/g, ""); // Normalize aliases like "count_numbers"
+            
+            const funcMap = {
+                "sum": Excel.AggregationFunction.sum,
+                "count": Excel.AggregationFunction.count,
+                "average": Excel.AggregationFunction.average,
+                "avg": Excel.AggregationFunction.average,  // Common alias
+                "max": Excel.AggregationFunction.max,
+                "min": Excel.AggregationFunction.min,
+                "countnumbers": Excel.AggregationFunction.countNumbers,
+                "stddev": Excel.AggregationFunction.standardDeviation,
+                "stdev": Excel.AggregationFunction.standardDeviation,  // Common alias
+                "standarddeviation": Excel.AggregationFunction.standardDeviation,
+                "var": Excel.AggregationFunction.variance,
+                "variance": Excel.AggregationFunction.variance
+            };
+            
+            const supportedFunctions = "Sum, Count, Average, Max, Min, CountNumbers, StdDev, Var";
+            
+            if (funcMap[funcName]) {
+                dataHierarchy.summarizeBy = funcMap[funcName];
+                logDebug(`Added field "${options.field}" to data area of PivotTable "${pivotName}" with ${funcName} aggregation`);
+            } else {
+                // Invalid function - warn and fall back to Sum
+                logWarn(`Unknown aggregation function "${rawFuncName}". Supported: ${supportedFunctions}. Falling back to Sum.`);
+                dataHierarchy.summarizeBy = Excel.AggregationFunction.sum;
+                logDebug(`Added field "${options.field}" to data area of PivotTable "${pivotName}" with Sum aggregation (fallback)`);
+            }
+        } else if (area === "filter") {
+            pivotTable.filterHierarchies.add(hierarchy);
+            logDebug(`Added field "${options.field}" to filter area of PivotTable "${pivotName}"`);
+        } else {
+            const errorMsg = `Invalid area "${options.area}". Use row, column, data, or filter.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        await ctx.sync();
+        logInfo(`Successfully added field "${options.field}" to ${area} area of PivotTable "${pivotName}"`);
+    } catch (e) {
+        const errorMsg = `Failed to add field "${options.field}" to PivotTable: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Configures PivotTable layout
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with layout options
+ */
+async function configurePivotLayout(ctx, sheet, action) {
+    logDebug(`Starting configurePivotLayout for target "${action.target}"`);
+    
+    let options = { pivotName: action.target, layout: null, showRowHeaders: null, showColumnHeaders: null };
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for configurePivotLayout`);
+        }
+    }
+    
+    const pivotName = options.pivotName || action.target;
+    
+    // Validate required fields
+    if (!options.layout) {
+        const errorMsg = `Layout type is required (Compact, Outline, or Tabular).`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        // Search for PivotTable in all sheets
+        const sheets = ctx.workbook.worksheets;
+        sheets.load("items");
+        await ctx.sync();
+        
+        let pivotTable = null;
+        for (const ws of sheets.items) {
+            const pt = ws.pivotTables.getItemOrNullObject(pivotName);
+            pt.load("isNullObject");
+            await ctx.sync();
+            
+            if (!pt.isNullObject) {
+                pivotTable = pt;
+                break;
+            }
+        }
+        
+        if (!pivotTable) {
+            const errorMsg = `PivotTable "${pivotName}" not found.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        // Set layout type
+        const layoutType = options.layout.toLowerCase();
+        if (layoutType === "compact") {
+            pivotTable.layout.layoutType = Excel.PivotLayoutType.compact;
+        } else if (layoutType === "outline") {
+            pivotTable.layout.layoutType = Excel.PivotLayoutType.outline;
+        } else if (layoutType === "tabular") {
+            pivotTable.layout.layoutType = Excel.PivotLayoutType.tabular;
+        } else {
+            const errorMsg = `Invalid layout type "${options.layout}". Use Compact, Outline, or Tabular.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        // Set optional header visibility
+        if (options.showRowHeaders !== null && options.showRowHeaders !== undefined) {
+            pivotTable.layout.showRowHeaders = options.showRowHeaders;
+        }
+        if (options.showColumnHeaders !== null && options.showColumnHeaders !== undefined) {
+            pivotTable.layout.showColumnHeaders = options.showColumnHeaders;
+        }
+        
+        await ctx.sync();
+        logInfo(`Successfully configured layout for PivotTable "${pivotName}" to ${options.layout}`);
+    } catch (e) {
+        const errorMsg = `Failed to configure PivotTable layout: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Refreshes a PivotTable or all PivotTables
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with refresh options
+ */
+async function refreshPivotTable(ctx, sheet, action) {
+    logDebug(`Starting refreshPivotTable for target "${action.target}"`);
+    
+    let options = { pivotName: action.target, refreshAll: false };
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for refreshPivotTable`);
+        }
+    }
+    
+    try {
+        if (options.refreshAll) {
+            // Refresh all PivotTables in workbook
+            ctx.workbook.pivotTables.refreshAll();
+            await ctx.sync();
+            logInfo(`Successfully refreshed all PivotTables in workbook`);
+        } else {
+            const pivotName = options.pivotName || action.target;
+            
+            // Search for PivotTable in all sheets
+            const sheets = ctx.workbook.worksheets;
+            sheets.load("items");
+            await ctx.sync();
+            
+            let pivotTable = null;
+            for (const ws of sheets.items) {
+                const pt = ws.pivotTables.getItemOrNullObject(pivotName);
+                pt.load("isNullObject");
+                await ctx.sync();
+                
+                if (!pt.isNullObject) {
+                    pivotTable = pt;
+                    break;
+                }
+            }
+            
+            if (!pivotTable) {
+                const errorMsg = `PivotTable "${pivotName}" not found.`;
+                logError(errorMsg);
+                throw new Error(errorMsg);
+            }
+            
+            pivotTable.refresh();
+            await ctx.sync();
+            logInfo(`Successfully refreshed PivotTable "${pivotName}"`);
+        }
+    } catch (e) {
+        const errorMsg = `Failed to refresh PivotTable: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Deletes a PivotTable
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with PivotTable name
+ */
+async function deletePivotTable(ctx, sheet, action) {
+    logDebug(`Starting deletePivotTable for target "${action.target}"`);
+    
+    let options = { pivotName: action.target };
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for deletePivotTable`);
+        }
+    }
+    
+    const pivotName = options.pivotName || action.target;
+    
+    try {
+        // Search for PivotTable in all sheets
+        const sheets = ctx.workbook.worksheets;
+        sheets.load("items");
+        await ctx.sync();
+        
+        let pivotTable = null;
+        for (const ws of sheets.items) {
+            const pt = ws.pivotTables.getItemOrNullObject(pivotName);
+            pt.load("isNullObject");
+            await ctx.sync();
+            
+            if (!pt.isNullObject) {
+                pivotTable = pt;
+                break;
+            }
+        }
+        
+        if (!pivotTable) {
+            const errorMsg = `PivotTable "${pivotName}" not found.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        pivotTable.delete();
+        await ctx.sync();
+        logInfo(`Successfully deleted PivotTable "${pivotName}"`);
+    } catch (e) {
+        const errorMsg = `Failed to delete PivotTable: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}

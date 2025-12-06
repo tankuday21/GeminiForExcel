@@ -44,6 +44,58 @@ describe("AI Engine", () => {
             expect(detectTaskType("Add validation")).toBe(TASK_TYPES.VALIDATION);
         });
 
+        test("detects table tasks", () => {
+            expect(detectTaskType("Create a table")).toBe(TASK_TYPES.TABLE);
+            expect(detectTaskType("Format as table")).toBe(TASK_TYPES.TABLE);
+            expect(detectTaskType("Add table column")).toBe(TASK_TYPES.TABLE);
+            expect(detectTaskType("Convert to table")).toBe(TASK_TYPES.TABLE);
+        });
+
+        test("detects pivot tasks", () => {
+            expect(detectTaskType("Create pivot table")).toBe(TASK_TYPES.PIVOT);
+            expect(detectTaskType("Add pivot field")).toBe(TASK_TYPES.PIVOT);
+            expect(detectTaskType("Summarize with pivot")).toBe(TASK_TYPES.PIVOT);
+        });
+
+        test("detects data manipulation tasks", () => {
+            expect(detectTaskType("Insert rows at row 5")).toBe(TASK_TYPES.DATA_MANIPULATION);
+            expect(detectTaskType("Merge cells A1 to C1")).toBe(TASK_TYPES.DATA_MANIPULATION);
+            expect(detectTaskType("Find and replace")).toBe(TASK_TYPES.DATA_MANIPULATION);
+            expect(detectTaskType("Text to columns")).toBe(TASK_TYPES.DATA_MANIPULATION);
+        });
+
+        test("detects shape tasks", () => {
+            expect(detectTaskType("Insert rectangle")).toBe(TASK_TYPES.SHAPES);
+            expect(detectTaskType("Add image")).toBe(TASK_TYPES.SHAPES);
+            expect(detectTaskType("Create text box")).toBe(TASK_TYPES.SHAPES);
+        });
+
+        test("detects comment tasks", () => {
+            expect(detectTaskType("Add comment")).toBe(TASK_TYPES.COMMENTS);
+            expect(detectTaskType("Reply to comment")).toBe(TASK_TYPES.COMMENTS);
+            expect(detectTaskType("Resolve comment")).toBe(TASK_TYPES.COMMENTS);
+        });
+
+        test("detects protection tasks", () => {
+            expect(detectTaskType("Protect worksheet")).toBe(TASK_TYPES.PROTECTION);
+            expect(detectTaskType("Lock cells")).toBe(TASK_TYPES.PROTECTION);
+            expect(detectTaskType("Unprotect sheet")).toBe(TASK_TYPES.PROTECTION);
+            expect(detectTaskType("Protect table")).toBe(TASK_TYPES.PROTECTION);
+            expect(detectTaskType("Protect this data")).toBe(TASK_TYPES.PROTECTION);
+        });
+
+        test("detects page setup tasks", () => {
+            expect(detectTaskType("Set page orientation")).toBe(TASK_TYPES.PAGE_SETUP);
+            expect(detectTaskType("Add header and footer")).toBe(TASK_TYPES.PAGE_SETUP);
+            expect(detectTaskType("Set print area")).toBe(TASK_TYPES.PAGE_SETUP);
+        });
+
+        test("handles priority correctly for overlapping keywords", () => {
+            expect(detectTaskType("Create pivot table")).toBe(TASK_TYPES.PIVOT); // not TABLE
+            expect(detectTaskType("Insert row in table")).toBe(TASK_TYPES.DATA_MANIPULATION); // not TABLE
+            expect(detectTaskType("Protect sheet with password")).toBe(TASK_TYPES.PROTECTION); // not FORMAT
+        });
+
         test("returns general for unknown tasks", () => {
             expect(detectTaskType("Hello")).toBe(TASK_TYPES.GENERAL);
             expect(detectTaskType("What can you do?")).toBe(TASK_TYPES.GENERAL);
