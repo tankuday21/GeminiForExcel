@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "3.5.4";
+const VERSION = "3.5.5";
 
 import {
     detectTaskType,
@@ -2563,44 +2563,342 @@ async function applyFormat(ctx, range, data) {
 }
 
 /**
- * Applies conditional formatting to a range
+ * Applies conditional formatting to a range with comprehensive Office.js support
  * Supports multiple rules in a single action
+ * 
+ * Supported types: cellValue, colorScale, dataBar, iconSet, topBottom, preset, textComparison, custom
  */
 async function applyConditionalFormat(ctx, range, data) {
     let rules;
     try { 
         const parsed = JSON.parse(data);
-        // Support both single rule and array of rules
         rules = Array.isArray(parsed) ? parsed : [parsed];
     } catch { 
         rules = []; 
     }
     
-    // Clear existing conditional formats only once
+    // Validation helper for hex colors
+    const isValidHexColor = (color) => /^#[0-9A-Fa-f]{6}$/.test(color);
+    
+    // Valid icon set styles
+    const validIconSets = [
+        "threeArrows", "threeArrowsGray", "threeTriangles", "threeFlags",
+        "threeTrafficLights1", "threeTrafficLights2", "threeSigns",
+        "threeSymbols", "threeSymbols2", "threeStars",
+        "fourArrows", "fourArrowsGray", "fourRedToBlack", "fourRating", "fourTrafficLights",
+        "fiveArrows", "fiveArrowsGray", "fiveRating", "fiveQuarters", "fiveBoxes"
+    ];
+    
+    // Valid preset criteria
+    const validPresetCriteria = [
+        "duplicateValues", "uniqueValues", "aboveAverage", "belowAverage",
+        "equalOrAboveAverage", "equalOrBelowAverage",
+        "oneStdDevAboveAverage", "oneStdDevBelowAverage",
+        "twoStdDevAboveAverage", "twoStdDevBelowAverage",
+        "threeStdDevAboveAverage", "threeStdDevBelowAverage",
+        "yesterday", "today", "tomorrow", "lastSevenDays",
+        "lastWeek", "thisWeek", "nextWeek",
+        "lastMonth", "thisMonth", "nextMonth"
+    ];
+    
     range.conditionalFormats.clearAll();
     await ctx.sync();
     
-    // Add each conditional format rule
     for (const rule of rules) {
-        if (rule.type === "cellValue" && rule.operator && rule.value) {
-            const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
-            cf.cellValue.format.fill.color = rule.fill || "#FFFF00";
+        try {
+            const ruleType = rule.type || "cellValue";
             
-            // Handle different operators
-            let operator = rule.operator;
-            if (operator === "GreaterThan") operator = Excel.ConditionalCellValueOperator.greaterThan;
-            else if (operator === "LessThan") operator = Excel.ConditionalCellValueOperator.lessThan;
-            else if (operator === "EqualTo") operator = Excel.ConditionalCellValueOperator.equalTo;
-            else if (operator === "GreaterThanOrEqual") operator = Excel.ConditionalCellValueOperator.greaterThanOrEqual;
-            else if (operator === "LessThanOrEqual") operator = Excel.ConditionalCellValueOperator.lessThanOrEqual;
-            else if (operator === "Between") operator = Excel.ConditionalCellValueOperator.between;
+            // ========== Cell Value ==========
+            if (ruleType === "cellValue" && rule.operator && rule.value !== undefined) {
+                // Map operator string to Excel enum with validation
+                const operatorMap = {
+                    "GreaterThan": Excel.ConditionalCellValueOperator.greaterThan,
+                    "LessThan": Excel.ConditionalCellValueOperator.lessThan,
+                    "EqualTo": Excel.ConditionalCellValueOperator.equalTo,
+                    "NotEqualTo": Excel.ConditionalCellValueOperator.notEqual,
+                    "GreaterThanOrEqual": Excel.ConditionalCellValueOperator.greaterThanOrEqual,
+                    "LessThanOrEqual": Excel.ConditionalCellValueOperator.lessThanOrEqual,
+                    "Between": Excel.ConditionalCellValueOperator.between
+                };
+                
+                const operator = operatorMap[rule.operator];
+                if (!operator) {
+                    console.warn(`Invalid cellValue operator: ${rule.operator}`);
+                    continue;
+                }
+                
+                const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
+                
+                // Apply fill color with validation
+                const fillColor = rule.fill || "#FFFF00";
+                cf.cellValue.format.fill.color = isValidHexColor(fillColor) ? fillColor : "#FFFF00";
+                
+                // Apply font color with validation
+                if (rule.fontColor && isValidHexColor(rule.fontColor)) {
+                    cf.cellValue.format.font.color = rule.fontColor;
+                }
+                if (rule.bold) cf.cellValue.format.font.bold = rule.bold;
+                
+                cf.cellValue.rule = {
+                    formula1: String(rule.value),
+                    formula2: rule.value2 ? String(rule.value2) : undefined,
+                    operator: operator
+                };
+            }
             
-            cf.cellValue.rule = {
-                formula1: String(rule.value),
-                formula2: rule.value2 ? String(rule.value2) : undefined,
-                operator: operator
-            };
-        }
+            // ========== Color Scale ==========
+            else if (ruleType === "colorScale" && rule.minimum && rule.maximum) {
+                const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+                
+                const mapCriterionType = (type) => {
+                    const typeMap = {
+                        "lowestValue": Excel.ConditionalFormatColorCriterionType.lowestValue,
+                        "highestValue": Excel.ConditionalFormatColorCriterionType.highestValue,
+                        "number": Excel.ConditionalFormatColorCriterionType.number,
+                        "percent": Excel.ConditionalFormatColorCriterionType.percent,
+                        "percentile": Excel.ConditionalFormatColorCriterionType.percentile,
+                        "formula": Excel.ConditionalFormatColorCriterionType.formula
+                    };
+                    return typeMap[type] || Excel.ConditionalFormatColorCriterionType.lowestValue;
+                };
+                
+                const criteria = {
+                    minimum: {
+                        type: mapCriterionType(rule.minimum.type),
+                        color: rule.minimum.color || "#63BE7B",
+                        formula: rule.minimum.formula || null
+                    },
+                    maximum: {
+                        type: mapCriterionType(rule.maximum.type),
+                        color: rule.maximum.color || "#F8696B",
+                        formula: rule.maximum.formula || null
+                    }
+                };
+                
+                if (rule.midpoint) {
+                    criteria.midpoint = {
+                        type: mapCriterionType(rule.midpoint.type),
+                        color: rule.midpoint.color || "#FFEB84",
+                        formula: rule.midpoint.formula || null
+                    };
+                }
+                
+                cf.colorScale.criteria = criteria;
+            }
+            
+            // ========== Data Bar ==========
+            else if (ruleType === "dataBar") {
+                const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.dataBar);
+                
+                if (rule.barDirection) {
+                    const directionMap = {
+                        "Context": Excel.ConditionalDataBarDirection.context,
+                        "LeftToRight": Excel.ConditionalDataBarDirection.leftToRight,
+                        "RightToLeft": Excel.ConditionalDataBarDirection.rightToLeft
+                    };
+                    cf.dataBar.barDirection = directionMap[rule.barDirection] || Excel.ConditionalDataBarDirection.context;
+                }
+                
+                if (rule.showDataBarOnly !== undefined) cf.dataBar.showDataBarOnly = rule.showDataBarOnly;
+                
+                if (rule.positiveFormat) {
+                    if (rule.positiveFormat.fillColor) cf.dataBar.positiveFormat.fillColor = rule.positiveFormat.fillColor;
+                    if (rule.positiveFormat.borderColor) cf.dataBar.positiveFormat.borderColor = rule.positiveFormat.borderColor;
+                    if (rule.positiveFormat.gradientFill !== undefined) cf.dataBar.positiveFormat.gradientFill = rule.positiveFormat.gradientFill;
+                }
+                
+                if (rule.negativeFormat) {
+                    if (rule.negativeFormat.fillColor) cf.dataBar.negativeFormat.fillColor = rule.negativeFormat.fillColor;
+                    if (rule.negativeFormat.borderColor) cf.dataBar.negativeFormat.borderColor = rule.negativeFormat.borderColor;
+                }
+                
+                if (rule.axisColor) cf.dataBar.axisColor = rule.axisColor;
+            }
+            
+            // ========== Icon Set ==========
+            else if (ruleType === "iconSet" && rule.style && validIconSets.includes(rule.style)) {
+                const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.iconSet);
+                
+                const styleMap = {
+                    "threeArrows": Excel.IconSet.threeArrows,
+                    "threeArrowsGray": Excel.IconSet.threeArrowsGray,
+                    "threeTriangles": Excel.IconSet.threeTriangles,
+                    "threeFlags": Excel.IconSet.threeFlags,
+                    "threeTrafficLights1": Excel.IconSet.threeTrafficLights1,
+                    "threeTrafficLights2": Excel.IconSet.threeTrafficLights2,
+                    "threeSigns": Excel.IconSet.threeSigns,
+                    "threeSymbols": Excel.IconSet.threeSymbols,
+                    "threeSymbols2": Excel.IconSet.threeSymbols2,
+                    "threeStars": Excel.IconSet.threeStars,
+                    "fourArrows": Excel.IconSet.fourArrows,
+                    "fourArrowsGray": Excel.IconSet.fourArrowsGray,
+                    "fourRedToBlack": Excel.IconSet.fourRedToBlack,
+                    "fourRating": Excel.IconSet.fourRating,
+                    "fourTrafficLights": Excel.IconSet.fourTrafficLights,
+                    "fiveArrows": Excel.IconSet.fiveArrows,
+                    "fiveArrowsGray": Excel.IconSet.fiveArrowsGray,
+                    "fiveRating": Excel.IconSet.fiveRating,
+                    "fiveQuarters": Excel.IconSet.fiveQuarters,
+                    "fiveBoxes": Excel.IconSet.fiveBoxes
+                };
+                
+                cf.iconSet.style = styleMap[rule.style];
+                
+                // Determine expected criteria count based on icon set style
+                const threeIconSets = ["threeArrows", "threeArrowsGray", "threeTriangles", "threeFlags", "threeTrafficLights1", "threeTrafficLights2", "threeSigns", "threeSymbols", "threeSymbols2", "threeStars"];
+                const fourIconSets = ["fourArrows", "fourArrowsGray", "fourRedToBlack", "fourRating", "fourTrafficLights"];
+                
+                let expectedCriteriaCount = 3;
+                if (fourIconSets.includes(rule.style)) expectedCriteriaCount = 4;
+                else if (!threeIconSets.includes(rule.style)) expectedCriteriaCount = 5;
+                
+                if (rule.criteria && Array.isArray(rule.criteria)) {
+                    // Validate criteria count matches icon count
+                    if (rule.criteria.length !== expectedCriteriaCount) {
+                        console.warn(`iconSet criteria count mismatch: expected ${expectedCriteriaCount} for ${rule.style}, got ${rule.criteria.length}`);
+                        continue;
+                    }
+                    
+                    const criteriaArray = rule.criteria.map(c => {
+                        if (!c || Object.keys(c).length === 0) return {};
+                        
+                        const criterionTypeMap = {
+                            "number": Excel.ConditionalFormatIconRuleType.number,
+                            "percent": Excel.ConditionalFormatIconRuleType.percent,
+                            "percentile": Excel.ConditionalFormatIconRuleType.percentile,
+                            "formula": Excel.ConditionalFormatIconRuleType.formula
+                        };
+                        
+                        const operatorMap = {
+                            "greaterThan": Excel.ConditionalIconCriterionOperator.greaterThan,
+                            "greaterThanOrEqual": Excel.ConditionalIconCriterionOperator.greaterThanOrEqual
+                        };
+                        
+                        return {
+                            type: criterionTypeMap[c.type] || Excel.ConditionalFormatIconRuleType.percent,
+                            operator: operatorMap[c.operator] || Excel.ConditionalIconCriterionOperator.greaterThanOrEqual,
+                            formula: c.formula || "0"
+                        };
+                    });
+                    cf.iconSet.criteria = criteriaArray;
+                }
+                
+                if (rule.showIconOnly !== undefined) cf.iconSet.showIconOnly = rule.showIconOnly;
+                if (rule.reverseIconOrder !== undefined) cf.iconSet.reverseIconOrder = rule.reverseIconOrder;
+            }
+            
+            // ========== Top/Bottom ==========
+            else if (ruleType === "topBottom" && rule.rule && rule.rank !== undefined) {
+                // Validate rank is a positive integer
+                const rank = parseInt(rule.rank);
+                if (!Number.isInteger(rank) || rank <= 0) {
+                    console.warn(`Invalid topBottom rank: ${rule.rank}. Rank must be a positive integer.`);
+                    continue;
+                }
+                
+                // Map rule type and validate
+                const ruleTypeMap = {
+                    "TopItems": Excel.ConditionalTopBottomCriterionType.topItems,
+                    "BottomItems": Excel.ConditionalTopBottomCriterionType.bottomItems,
+                    "TopPercent": Excel.ConditionalTopBottomCriterionType.topPercent,
+                    "BottomPercent": Excel.ConditionalTopBottomCriterionType.bottomPercent
+                };
+                
+                const mappedRuleType = ruleTypeMap[rule.rule];
+                if (!mappedRuleType) {
+                    console.warn(`Invalid topBottom rule type: ${rule.rule}`);
+                    continue;
+                }
+                
+                const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.topBottom);
+                
+                cf.topBottom.rule = {
+                    type: mappedRuleType,
+                    rank: rank
+                };
+                
+                // Apply formatting with color validation
+                if (rule.fill && isValidHexColor(rule.fill)) cf.topBottom.format.fill.color = rule.fill;
+                if (rule.fontColor && isValidHexColor(rule.fontColor)) cf.topBottom.format.font.color = rule.fontColor;
+                if (rule.bold) cf.topBottom.format.font.bold = rule.bold;
+            }
+            
+            // ========== Preset ==========
+            else if (ruleType === "preset" && rule.criterion && validPresetCriteria.includes(rule.criterion)) {
+                const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.presetCriteria);
+                
+                const criterionMap = {
+                    "duplicateValues": Excel.ConditionalFormatPresetCriterion.duplicateValues,
+                    "uniqueValues": Excel.ConditionalFormatPresetCriterion.uniqueValues,
+                    "aboveAverage": Excel.ConditionalFormatPresetCriterion.aboveAverage,
+                    "belowAverage": Excel.ConditionalFormatPresetCriterion.belowAverage,
+                    "equalOrAboveAverage": Excel.ConditionalFormatPresetCriterion.equalOrAboveAverage,
+                    "equalOrBelowAverage": Excel.ConditionalFormatPresetCriterion.equalOrBelowAverage,
+                    "oneStdDevAboveAverage": Excel.ConditionalFormatPresetCriterion.oneStdDevAboveAverage,
+                    "oneStdDevBelowAverage": Excel.ConditionalFormatPresetCriterion.oneStdDevBelowAverage,
+                    "twoStdDevAboveAverage": Excel.ConditionalFormatPresetCriterion.twoStdDevAboveAverage,
+                    "twoStdDevBelowAverage": Excel.ConditionalFormatPresetCriterion.twoStdDevBelowAverage,
+                    "threeStdDevAboveAverage": Excel.ConditionalFormatPresetCriterion.threeStdDevAboveAverage,
+                    "threeStdDevBelowAverage": Excel.ConditionalFormatPresetCriterion.threeStdDevBelowAverage,
+                    "yesterday": Excel.ConditionalFormatPresetCriterion.yesterday,
+                    "today": Excel.ConditionalFormatPresetCriterion.today,
+                    "tomorrow": Excel.ConditionalFormatPresetCriterion.tomorrow,
+                    "lastSevenDays": Excel.ConditionalFormatPresetCriterion.lastSevenDays,
+                    "lastWeek": Excel.ConditionalFormatPresetCriterion.lastWeek,
+                    "thisWeek": Excel.ConditionalFormatPresetCriterion.thisWeek,
+                    "nextWeek": Excel.ConditionalFormatPresetCriterion.nextWeek,
+                    "lastMonth": Excel.ConditionalFormatPresetCriterion.lastMonth,
+                    "thisMonth": Excel.ConditionalFormatPresetCriterion.thisMonth,
+                    "nextMonth": Excel.ConditionalFormatPresetCriterion.nextMonth
+                };
+                
+                cf.preset.rule = { criterion: criterionMap[rule.criterion] };
+                
+                // Apply formatting with color validation
+                if (rule.fill && isValidHexColor(rule.fill)) cf.preset.format.fill.color = rule.fill;
+                if (rule.fontColor && isValidHexColor(rule.fontColor)) cf.preset.format.font.color = rule.fontColor;
+                if (rule.bold) cf.preset.format.font.bold = rule.bold;
+            }
+            
+            // ========== Text Comparison ==========
+            else if (ruleType === "textComparison" && rule.operator && rule.text) {
+                const validOperators = ["contains", "notContains", "beginsWith", "endsWith"];
+                if (!validOperators.includes(rule.operator)) continue;
+                
+                const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.containsText);
+                
+                const operatorMap = {
+                    "contains": Excel.ConditionalTextOperator.contains,
+                    "notContains": Excel.ConditionalTextOperator.notContains,
+                    "beginsWith": Excel.ConditionalTextOperator.beginsWith,
+                    "endsWith": Excel.ConditionalTextOperator.endsWith
+                };
+                
+                cf.textComparison.rule = {
+                    operator: operatorMap[rule.operator],
+                    text: rule.text
+                };
+                
+                // Apply formatting with color validation
+                if (rule.fill && isValidHexColor(rule.fill)) cf.textComparison.format.fill.color = rule.fill;
+                if (rule.fontColor && isValidHexColor(rule.fontColor)) cf.textComparison.format.font.color = rule.fontColor;
+                if (rule.bold) cf.textComparison.format.font.bold = rule.bold;
+            }
+            
+            // ========== Custom Formula ==========
+            else if (ruleType === "custom" && rule.formula && rule.formula.startsWith("=")) {
+                const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.custom);
+                
+                cf.custom.rule = { formula: rule.formula };
+                
+                // Apply formatting with color validation
+                if (rule.fill && isValidHexColor(rule.fill)) cf.custom.format.fill.color = rule.fill;
+                if (rule.fontColor && isValidHexColor(rule.fontColor)) cf.custom.format.font.color = rule.fontColor;
+                if (rule.bold) cf.custom.format.font.bold = rule.bold;
+                if (rule.italic) cf.custom.format.font.italic = rule.italic;
+            }
+            
+        } catch (e) { console.warn("Conditional format error:", e); }
     }
 }
 
