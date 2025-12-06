@@ -77,7 +77,8 @@ const TASK_KEYWORDS = {
     [TASK_TYPES.TABLE]: [
         "table", "create table", "format as table", "table style", "structured reference",
         "table column", "table row", "total row", "table header", "convert to table",
-        "resize table", "expand table", "table name", "table design"
+        "resize table", "expand table", "table name", "table design",
+        "slicer", "filter button", "interactive filter", "table slicer"
     ],
     /**
      * PIVOT Task Type
@@ -87,7 +88,8 @@ const TASK_KEYWORDS = {
     [TASK_TYPES.PIVOT]: [
         "pivot", "pivot table", "pivottable", "create pivot", "pivot chart",
         "summarize with pivot", "cross-tab", "pivot field", "row field", "column field",
-        "value field", "pivot filter", "refresh pivot", "pivot layout"
+        "value field", "pivot filter", "refresh pivot", "pivot layout",
+        "pivot slicer", "slicer for pivot"
     ],
     /**
      * DATA_MANIPULATION Task Type
@@ -466,7 +468,7 @@ Values should be a 2D array matching the target range dimensions.`,
 - Dataset has clear headers and consistent structure
 - Need automatic filtering and sorting
 - Want formulas to auto-expand with new rows
-- Building dashboards with slicers (future feature)
+- Building dashboards with slicers for interactive filtering
 - Need structured references for maintainability
 
 ## OUTPUT FORMAT
@@ -504,6 +506,11 @@ Values should be a 2D array matching the target range dimensions.`,
 {"show":true,"totals":[{"columnIndex":4,"function":"Sum"}]}
 </ACTION>
 
+**Add Slicer to Table:**
+<ACTION type="createSlicer" target="SalesData">
+{"slicerName":"RegionSlicer","sourceType":"table","sourceName":"SalesData","field":"Region","position":{"left":500,"top":100,"width":200,"height":200},"style":"SlicerStyleLight3"}
+</ACTION>
+
 Available table styles: TableStyleLight1-21, TableStyleMedium1-28, TableStyleDark1-11
 
 Explain what the table operation does and why it benefits the user's workflow.`,
@@ -534,6 +541,7 @@ You can execute PivotTable operations directly through ACTION tags. Always expla
 3. Start with row fields (categories), then add values
 4. Use filters for interactive analysis
 5. Refresh PivotTables after source data changes
+6. Add slicers for interactive filtering without modifying pivot structure
 
 ## OUTPUT FORMAT
 
@@ -566,6 +574,11 @@ You can execute PivotTable operations directly through ACTION tags. Always expla
 <ACTION type="deletePivotTable" target="SalesPivot">
 </ACTION>
 
+**Add Slicer to PivotTable:**
+<ACTION type="createSlicer" target="SalesPivot">
+{"slicerName":"YearSlicer","sourceType":"pivot","sourceName":"SalesPivot","field":"Year","position":{"left":600,"top":50,"width":150,"height":250},"style":"SlicerStyleDark2"}
+</ACTION>
+
 Available aggregation functions: Sum, Count, Average, Max, Min, CountNumbers, StdDev, Var
 Available layouts: Compact (default), Outline, Tabular
 
@@ -595,6 +608,14 @@ Steps:
 4. Add Region to column area
 5. Add Sales to data area with Sum function
 6. Configure layout to Outline for better readability
+
+**Scenario 4: Interactive Dashboard with Slicers**
+User: "Add slicers for Region and Year to the sales pivot"
+Steps:
+1. Create slicer for Region field
+2. Create slicer for Year field
+3. Position slicers side-by-side for easy access
+4. Apply consistent styling
 
 Explain the PivotTable structure and what insights it will provide.`,
 
@@ -1024,6 +1045,20 @@ Example: Create a sheet named "Summary":
 **Layouts:** Compact (default, nested), Outline (hierarchical), Tabular (flat table)
 **Multi-step workflow:** 1) createPivotTable, 2) addPivotField for each dimension/value, 3) configurePivotLayout (optional)
 
+## SLICER OPERATIONS
+- createSlicer: <ACTION type="createSlicer" target="SOURCENAME">{"slicerName":"NAME","sourceType":"table|pivot","sourceName":"NAME","field":"FIELDNAME","position":{"left":500,"top":100,"width":200,"height":200},"style":"SlicerStyleLight1"}</ACTION>
+- configureSlicer: <ACTION type="configureSlicer" target="SLICERNAME">{"caption":"CAPTION","style":"SlicerStyleDark3","sortBy":"Ascending","width":250,"height":300}</ACTION>
+- connectSlicerToTable: <ACTION type="connectSlicerToTable" target="SLICERNAME">{"tableName":"TABLENAME","field":"FIELDNAME"}</ACTION>
+- connectSlicerToPivot: <ACTION type="connectSlicerToPivot" target="SLICERNAME">{"pivotName":"PIVOTNAME","field":"FIELDNAME"}</ACTION>
+- deleteSlicer: <ACTION type="deleteSlicer" target="SLICERNAME"></ACTION>
+
+**Slicer Creation:** sourceType must be "table" or "pivot"; field must exist in source columns/hierarchies
+**Slicer Positioning:** left/top/width/height in points (default: 200x200 at 100,100); position to avoid overlap
+**Slicer Styles:** 12 styles available - SlicerStyleLight1-6, SlicerStyleDark1-6
+**Slicer Sorting:** DataSourceOrder (default), Ascending, Descending
+**Multi-step workflow:** 1) Create table/pivot, 2) createSlicer for each filter dimension, 3) configureSlicer for styling/layout
+**Note:** Slicers are bound to source at creation; reconnecting requires deletion and recreation
+
 ## ADVANCED ACTIONS (executor support pending)
 **NOTE:** The following actions are planned but not yet fully supported. If you need these features, explain the steps to the user and suggest they perform the action manually in Excel, OR use supported actions (formula, values, format, chart, validation, sort, filter, copy, copyValues, removeDuplicates, sheet, table operations, data manipulation, pivot table operations) as alternatives where possible.
 
@@ -1072,7 +1107,7 @@ When user prompt contains multiple task indicators:
 ## MULTI-STEP OPERATIONS
 For complex requests involving multiple task types:
 1. Break into logical steps
-2. Execute in dependency order (e.g., create table → add slicer)
+2. Execute in dependency order (e.g., create table → create slicer → configure slicer)
 3. Provide clear explanations between steps`;
 }
 

@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "3.5.1";
+const VERSION = "3.5.2";
 
 import {
     detectTaskType,
@@ -2045,7 +2045,12 @@ async function executeAction(ctx, sheet, action) {
         "insertRows",            // target is row number, not range
         "insertColumns",         // target is column letter, not range
         "deleteRows",            // target is row range like "10:15"
-        "deleteColumns"          // target is column range like "D:F"
+        "deleteColumns",         // target is column range like "D:F"
+        "createSlicer",          // target is table/pivot name
+        "configureSlicer",       // target is slicer name
+        "connectSlicerToTable",  // target is slicer name
+        "connectSlicerToPivot",  // target is slicer name
+        "deleteSlicer"           // target is slicer name
     ];
     
     // Only pre-load range for actions that actually need it
@@ -2202,6 +2207,26 @@ async function executeAction(ctx, sheet, action) {
             
         case "deletePivotTable":
             await deletePivotTable(ctx, sheet, action);
+            break;
+            
+        case "createSlicer":
+            await createSlicer(ctx, sheet, action);
+            break;
+            
+        case "configureSlicer":
+            await configureSlicer(ctx, sheet, action);
+            break;
+            
+        case "connectSlicerToTable":
+            await connectSlicerToTable(ctx, sheet, action);
+            break;
+            
+        case "connectSlicerToPivot":
+            await connectSlicerToPivot(ctx, sheet, action);
+            break;
+            
+        case "deleteSlicer":
+            await deleteSlicer(ctx, sheet, action);
             break;
             
         default:
@@ -4174,6 +4199,586 @@ async function deletePivotTable(ctx, sheet, action) {
         logInfo(`Successfully deleted PivotTable "${pivotName}"`);
     } catch (e) {
         const errorMsg = `Failed to delete PivotTable: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+// ============================================================================
+// Slicer Operations
+// ============================================================================
+
+/**
+ * Valid slicer styles for validation
+ */
+const VALID_SLICER_STYLES = [
+    ...Array.from({ length: 6 }, (_, i) => `SlicerStyleLight${i + 1}`),
+    ...Array.from({ length: 6 }, (_, i) => `SlicerStyleDark${i + 1}`)
+];
+
+/**
+ * Creates a slicer for a Table or PivotTable
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with slicer options
+ */
+async function createSlicer(ctx, sheet, action) {
+    logDebug(`Starting createSlicer for target "${action.target}"`);
+    
+    let options = {
+        slicerName: null,
+        sourceType: null,
+        sourceName: action.target,
+        field: null,
+        position: { left: 100, top: 100, width: 200, height: 200 },
+        style: "SlicerStyleLight1"
+    };
+    
+    if (action.data) {
+        try {
+            const parsed = JSON.parse(action.data);
+            options = { ...options, ...parsed };
+            if (parsed.position) {
+                options.position = { ...options.position, ...parsed.position };
+            }
+        } catch (e) {
+            logWarn(`Failed to parse action.data for createSlicer`);
+        }
+    }
+    
+    // Validate required fields
+    if (!options.sourceName) {
+        const errorMsg = `Source name (table or pivot name) is required.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    if (!options.field) {
+        const errorMsg = `Field name is required for slicer.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    if (!options.sourceType || !["table", "pivot"].includes(options.sourceType.toLowerCase())) {
+        const errorMsg = `Source type must be "table" or "pivot".`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        let slicerSource = null;
+        let targetWorksheet = sheet;
+        const sourceType = options.sourceType.toLowerCase();
+        
+        if (sourceType === "table") {
+            // Get table from current sheet
+            const table = sheet.tables.getItemOrNullObject(options.sourceName);
+            table.load("isNullObject");
+            await ctx.sync();
+            
+            if (table.isNullObject) {
+                const errorMsg = `Table "${options.sourceName}" not found on active sheet.`;
+                logError(errorMsg);
+                throw new Error(errorMsg);
+            }
+            
+            slicerSource = table;
+            logDebug(`Found table "${options.sourceName}" for slicer`);
+        } else if (sourceType === "pivot") {
+            // Search for PivotTable in all sheets
+            const sheets = ctx.workbook.worksheets;
+            sheets.load("items");
+            await ctx.sync();
+            
+            let pivotTable = null;
+            for (const ws of sheets.items) {
+                const pt = ws.pivotTables.getItemOrNullObject(options.sourceName);
+                pt.load("isNullObject");
+                await ctx.sync();
+                
+                if (!pt.isNullObject) {
+                    pivotTable = pt;
+                    ws.load("name");
+                    await ctx.sync();
+                    targetWorksheet = ws;
+                    break;
+                }
+            }
+            
+            if (!pivotTable) {
+                const errorMsg = `PivotTable "${options.sourceName}" not found.`;
+                logError(errorMsg);
+                throw new Error(errorMsg);
+            }
+            
+            slicerSource = pivotTable;
+            logDebug(`Found PivotTable "${options.sourceName}" for slicer`);
+        }
+        
+        // Create the slicer
+        const slicer = targetWorksheet.slicers.add(slicerSource, options.field, targetWorksheet);
+        
+        // Set slicer name if provided
+        if (options.slicerName) {
+            slicer.name = options.slicerName;
+        }
+        
+        // Set position and size
+        slicer.left = options.position.left || 100;
+        slicer.top = options.position.top || 100;
+        slicer.width = options.position.width || 200;
+        slicer.height = options.position.height || 200;
+        
+        // Set style with validation
+        if (options.style) {
+            if (VALID_SLICER_STYLES.includes(options.style)) {
+                slicer.style = options.style;
+            } else {
+                logWarn(`Invalid slicer style "${options.style}". Using default SlicerStyleLight1.`);
+                slicer.style = "SlicerStyleLight1";
+            }
+        }
+        
+        await ctx.sync();
+        
+        const slicerDisplayName = options.slicerName || options.field;
+        logInfo(`Successfully created slicer "${slicerDisplayName}" for ${sourceType} "${options.sourceName}" on field "${options.field}"`);
+    } catch (e) {
+        const errorMsg = `Failed to create slicer: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Configures an existing slicer's properties
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with configuration options
+ */
+async function configureSlicer(ctx, sheet, action) {
+    logDebug(`Starting configureSlicer for target "${action.target}"`);
+    
+    let options = {
+        slicerName: action.target,
+        caption: null,
+        style: null,
+        sortBy: null,
+        width: null,
+        height: null,
+        left: null,
+        top: null
+    };
+    
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for configureSlicer`);
+        }
+    }
+    
+    const slicerName = options.slicerName || action.target;
+    
+    if (!slicerName) {
+        const errorMsg = `Slicer name is required.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        // Search for slicer in all worksheets
+        const sheets = ctx.workbook.worksheets;
+        sheets.load("items");
+        await ctx.sync();
+        
+        let slicer = null;
+        for (const ws of sheets.items) {
+            ws.slicers.load("items");
+            await ctx.sync();
+            
+            const sl = ws.slicers.getItemOrNullObject(slicerName);
+            sl.load("isNullObject");
+            await ctx.sync();
+            
+            if (!sl.isNullObject) {
+                slicer = sl;
+                break;
+            }
+        }
+        
+        if (!slicer) {
+            const errorMsg = `Slicer "${slicerName}" not found.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        const updatedProps = [];
+        
+        // Apply properties conditionally
+        if (options.caption !== null && options.caption !== undefined) {
+            slicer.caption = options.caption;
+            updatedProps.push("caption");
+        }
+        
+        if (options.style) {
+            if (VALID_SLICER_STYLES.includes(options.style)) {
+                slicer.style = options.style;
+                updatedProps.push("style");
+            } else {
+                logWarn(`Invalid slicer style "${options.style}". Skipping style update.`);
+            }
+        }
+        
+        if (options.sortBy) {
+            const sortMap = {
+                "datasourceorder": Excel.SlicerSortType.dataSourceOrder,
+                "ascending": Excel.SlicerSortType.ascending,
+                "descending": Excel.SlicerSortType.descending
+            };
+            const sortKey = options.sortBy.toLowerCase().replace(/\s/g, "");
+            if (sortMap[sortKey]) {
+                slicer.sortBy = sortMap[sortKey];
+                updatedProps.push("sortBy");
+            } else {
+                logWarn(`Invalid sortBy value "${options.sortBy}". Use DataSourceOrder, Ascending, or Descending.`);
+            }
+        }
+        
+        if (options.width !== null && options.width !== undefined) {
+            slicer.width = options.width;
+            updatedProps.push("width");
+        }
+        
+        if (options.height !== null && options.height !== undefined) {
+            slicer.height = options.height;
+            updatedProps.push("height");
+        }
+        
+        if (options.left !== null && options.left !== undefined) {
+            slicer.left = options.left;
+            updatedProps.push("left");
+        }
+        
+        if (options.top !== null && options.top !== undefined) {
+            slicer.top = options.top;
+            updatedProps.push("top");
+        }
+        
+        await ctx.sync();
+        logInfo(`Successfully configured slicer "${slicerName}". Updated: ${updatedProps.join(", ") || "none"}`);
+    } catch (e) {
+        const errorMsg = `Failed to configure slicer: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Connects a slicer to a different table (recreates slicer)
+ * Note: Office.js doesn't support rebinding slicers; this deletes and recreates
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with connection options
+ */
+async function connectSlicerToTable(ctx, sheet, action) {
+    logDebug(`Starting connectSlicerToTable for target "${action.target}"`);
+    
+    let options = {
+        slicerName: action.target,
+        tableName: null,
+        field: null
+    };
+    
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for connectSlicerToTable`);
+        }
+    }
+    
+    const slicerName = options.slicerName || action.target;
+    
+    if (!slicerName) {
+        const errorMsg = `Slicer name is required.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    if (!options.tableName) {
+        const errorMsg = `Table name is required.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    if (!options.field) {
+        const errorMsg = `Field name is required.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        // Find existing slicer to get its properties
+        const sheets = ctx.workbook.worksheets;
+        sheets.load("items");
+        await ctx.sync();
+        
+        let existingSlicer = null;
+        let slicerWorksheet = null;
+        
+        for (const ws of sheets.items) {
+            ws.slicers.load("items");
+            await ctx.sync();
+            
+            const sl = ws.slicers.getItemOrNullObject(slicerName);
+            sl.load(["isNullObject", "left", "top", "width", "height", "style", "caption"]);
+            await ctx.sync();
+            
+            if (!sl.isNullObject) {
+                existingSlicer = sl;
+                slicerWorksheet = ws;
+                break;
+            }
+        }
+        
+        if (!existingSlicer) {
+            const errorMsg = `Slicer "${slicerName}" not found.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        // Store slicer properties before deletion
+        const slicerProps = {
+            left: existingSlicer.left,
+            top: existingSlicer.top,
+            width: existingSlicer.width,
+            height: existingSlicer.height,
+            style: existingSlicer.style,
+            caption: existingSlicer.caption
+        };
+        
+        // Delete existing slicer
+        existingSlicer.delete();
+        await ctx.sync();
+        logDebug(`Deleted existing slicer "${slicerName}" for reconnection`);
+        
+        // Get the table
+        const table = sheet.tables.getItemOrNullObject(options.tableName);
+        table.load("isNullObject");
+        await ctx.sync();
+        
+        if (table.isNullObject) {
+            const errorMsg = `Table "${options.tableName}" not found.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        // Create new slicer with same properties
+        const newSlicer = sheet.slicers.add(table, options.field, sheet);
+        newSlicer.name = slicerName;
+        newSlicer.left = slicerProps.left;
+        newSlicer.top = slicerProps.top;
+        newSlicer.width = slicerProps.width;
+        newSlicer.height = slicerProps.height;
+        if (slicerProps.style) newSlicer.style = slicerProps.style;
+        if (slicerProps.caption) newSlicer.caption = slicerProps.caption;
+        
+        await ctx.sync();
+        logInfo(`Successfully reconnected slicer "${slicerName}" to table "${options.tableName}" on field "${options.field}"`);
+    } catch (e) {
+        const errorMsg = `Failed to connect slicer to table: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Connects a slicer to a different PivotTable (recreates slicer)
+ * Note: Office.js doesn't support rebinding slicers; this deletes and recreates
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with connection options
+ */
+async function connectSlicerToPivot(ctx, sheet, action) {
+    logDebug(`Starting connectSlicerToPivot for target "${action.target}"`);
+    
+    let options = {
+        slicerName: action.target,
+        pivotName: null,
+        field: null
+    };
+    
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for connectSlicerToPivot`);
+        }
+    }
+    
+    const slicerName = options.slicerName || action.target;
+    
+    if (!slicerName) {
+        const errorMsg = `Slicer name is required.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    if (!options.pivotName) {
+        const errorMsg = `PivotTable name is required.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    if (!options.field) {
+        const errorMsg = `Field name is required.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        // Find existing slicer to get its properties
+        const sheets = ctx.workbook.worksheets;
+        sheets.load("items");
+        await ctx.sync();
+        
+        let existingSlicer = null;
+        
+        for (const ws of sheets.items) {
+            ws.slicers.load("items");
+            await ctx.sync();
+            
+            const sl = ws.slicers.getItemOrNullObject(slicerName);
+            sl.load(["isNullObject", "left", "top", "width", "height", "style", "caption"]);
+            await ctx.sync();
+            
+            if (!sl.isNullObject) {
+                existingSlicer = sl;
+                break;
+            }
+        }
+        
+        if (!existingSlicer) {
+            const errorMsg = `Slicer "${slicerName}" not found.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        // Store slicer properties before deletion
+        const slicerProps = {
+            left: existingSlicer.left,
+            top: existingSlicer.top,
+            width: existingSlicer.width,
+            height: existingSlicer.height,
+            style: existingSlicer.style,
+            caption: existingSlicer.caption
+        };
+        
+        // Delete existing slicer
+        existingSlicer.delete();
+        await ctx.sync();
+        logDebug(`Deleted existing slicer "${slicerName}" for reconnection`);
+        
+        // Find the PivotTable
+        let pivotTable = null;
+        let pivotWorksheet = null;
+        
+        for (const ws of sheets.items) {
+            const pt = ws.pivotTables.getItemOrNullObject(options.pivotName);
+            pt.load("isNullObject");
+            await ctx.sync();
+            
+            if (!pt.isNullObject) {
+                pivotTable = pt;
+                pivotWorksheet = ws;
+                break;
+            }
+        }
+        
+        if (!pivotTable) {
+            const errorMsg = `PivotTable "${options.pivotName}" not found.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        // Create new slicer with same properties
+        const newSlicer = pivotWorksheet.slicers.add(pivotTable, options.field, pivotWorksheet);
+        newSlicer.name = slicerName;
+        newSlicer.left = slicerProps.left;
+        newSlicer.top = slicerProps.top;
+        newSlicer.width = slicerProps.width;
+        newSlicer.height = slicerProps.height;
+        if (slicerProps.style) newSlicer.style = slicerProps.style;
+        if (slicerProps.caption) newSlicer.caption = slicerProps.caption;
+        
+        await ctx.sync();
+        logInfo(`Successfully reconnected slicer "${slicerName}" to PivotTable "${options.pivotName}" on field "${options.field}"`);
+    } catch (e) {
+        const errorMsg = `Failed to connect slicer to PivotTable: ${e.message}`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+}
+
+/**
+ * Deletes a slicer
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Active worksheet
+ * @param {Object} action - Action with slicer name
+ */
+async function deleteSlicer(ctx, sheet, action) {
+    logDebug(`Starting deleteSlicer for target "${action.target}"`);
+    
+    let options = { slicerName: action.target };
+    if (action.data) {
+        try {
+            options = { ...options, ...JSON.parse(action.data) };
+        } catch (e) {
+            logWarn(`Failed to parse action.data for deleteSlicer`);
+        }
+    }
+    
+    const slicerName = options.slicerName || action.target;
+    
+    if (!slicerName) {
+        const errorMsg = `Slicer name is required.`;
+        logError(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    try {
+        // Search for slicer in all worksheets
+        const sheets = ctx.workbook.worksheets;
+        sheets.load("items");
+        await ctx.sync();
+        
+        let slicer = null;
+        for (const ws of sheets.items) {
+            ws.slicers.load("items");
+            await ctx.sync();
+            
+            const sl = ws.slicers.getItemOrNullObject(slicerName);
+            sl.load("isNullObject");
+            await ctx.sync();
+            
+            if (!sl.isNullObject) {
+                slicer = sl;
+                break;
+            }
+        }
+        
+        if (!slicer) {
+            const errorMsg = `Slicer "${slicerName}" not found.`;
+            logError(errorMsg);
+            throw new Error(errorMsg);
+        }
+        
+        slicer.delete();
+        await ctx.sync();
+        logInfo(`Successfully deleted slicer "${slicerName}"`);
+    } catch (e) {
+        const errorMsg = `Failed to delete slicer: ${e.message}`;
         logError(errorMsg);
         throw new Error(errorMsg);
     }
