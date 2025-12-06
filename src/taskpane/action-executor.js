@@ -1340,20 +1340,23 @@ async function convertToRange(ctx, sheet, tableName) {
 }
 
 /**
- * Valid totals calculation functions map
+ * Gets valid totals calculation functions map
+ * Note: Must be called inside Excel.run context, not at module load time
  */
-const VALID_TOTALS_FUNCTIONS = {
-    "sum": Excel.TotalsCalculation.sum,
-    "average": Excel.TotalsCalculation.average,
-    "avg": Excel.TotalsCalculation.average,
-    "count": Excel.TotalsCalculation.count,
-    "countnumbers": Excel.TotalsCalculation.countNumbers,
-    "max": Excel.TotalsCalculation.max,
-    "min": Excel.TotalsCalculation.min,
-    "stddev": Excel.TotalsCalculation.stdDev,
-    "var": Excel.TotalsCalculation.var,
-    "none": Excel.TotalsCalculation.none
-};
+function getValidTotalsFunctions() {
+    return {
+        "sum": Excel.TotalsCalculation.sum,
+        "average": Excel.TotalsCalculation.average,
+        "avg": Excel.TotalsCalculation.average,
+        "count": Excel.TotalsCalculation.count,
+        "countnumbers": Excel.TotalsCalculation.countNumbers,
+        "max": Excel.TotalsCalculation.max,
+        "min": Excel.TotalsCalculation.min,
+        "stddev": Excel.TotalsCalculation.stdDev,
+        "var": Excel.TotalsCalculation.var,
+        "none": Excel.TotalsCalculation.none
+    };
+}
 
 /**
  * Toggles the total row for a table
@@ -1423,7 +1426,8 @@ async function toggleTableTotals(ctx, sheet, action) {
             }
             
             const funcName = String(totalConfig.function).toLowerCase().replace(/\s/g, "");
-            const calcFunc = VALID_TOTALS_FUNCTIONS[funcName];
+            const validFunctions = getValidTotalsFunctions();
+            const calcFunc = validFunctions[funcName];
             
             if (!calcFunc) {
                 logDiag(`Warning: Invalid totals function "${totalConfig.function}" for column ${totalConfig.columnIndex}. Valid functions: Sum, Average, Count, Max, Min, StdDev, Var, None`);

@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "3.5.0";
+const VERSION = "3.5.1";
 
 import {
     detectTaskType,
@@ -3302,20 +3302,23 @@ async function convertToRange(ctx, sheet, tableName) {
  * @param {Object} action - Action with totals options
  */
 /**
- * Valid totals calculation functions map
+ * Gets valid totals calculation functions map
+ * Note: Must be called inside Excel.run context, not at module load time
  */
-const VALID_TOTALS_FUNCTIONS = {
-    "sum": Excel.TotalsCalculation.sum,
-    "average": Excel.TotalsCalculation.average,
-    "avg": Excel.TotalsCalculation.average,
-    "count": Excel.TotalsCalculation.count,
-    "countnumbers": Excel.TotalsCalculation.countNumbers,
-    "max": Excel.TotalsCalculation.max,
-    "min": Excel.TotalsCalculation.min,
-    "stddev": Excel.TotalsCalculation.stdDev,
-    "var": Excel.TotalsCalculation.var,
-    "none": Excel.TotalsCalculation.none
-};
+function getValidTotalsFunctions() {
+    return {
+        "sum": Excel.TotalsCalculation.sum,
+        "average": Excel.TotalsCalculation.average,
+        "avg": Excel.TotalsCalculation.average,
+        "count": Excel.TotalsCalculation.count,
+        "countnumbers": Excel.TotalsCalculation.countNumbers,
+        "max": Excel.TotalsCalculation.max,
+        "min": Excel.TotalsCalculation.min,
+        "stddev": Excel.TotalsCalculation.stdDev,
+        "var": Excel.TotalsCalculation.var,
+        "none": Excel.TotalsCalculation.none
+    };
+}
 
 async function toggleTableTotals(ctx, sheet, action) {
     logDebug(`Starting toggleTableTotals for target "${action.target}"`);
@@ -3379,7 +3382,8 @@ async function toggleTableTotals(ctx, sheet, action) {
             }
             
             const funcName = String(totalConfig.function).toLowerCase().replace(/\s/g, "");
-            const calcFunc = VALID_TOTALS_FUNCTIONS[funcName];
+            const validFunctions = getValidTotalsFunctions();
+            const calcFunc = validFunctions[funcName];
             
             if (!calcFunc) {
                 logWarn(`Invalid totals function "${totalConfig.function}" for column ${totalConfig.columnIndex}. Valid functions: Sum, Average, Count, Max, Min, StdDev, Var, None`);
