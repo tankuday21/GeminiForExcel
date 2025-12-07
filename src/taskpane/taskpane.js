@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "3.5.8";
+const VERSION = "3.5.9";
 
 import {
     detectTaskType,
@@ -56,7 +56,9 @@ const CONFIG = {
     THEME_KEY: "excel_copilot_theme",
     MAX_HISTORY: 10,
     MAX_RETRIES: 3,
-    RETRY_DELAY: 1000,
+    RETRY_DELAY: 2000, // Increased from 1000ms to 2000ms for better rate limit handling
+    RATE_LIMIT_DELAY: 60000, // 60 seconds delay after hitting rate limit
+    MIN_REQUEST_INTERVAL: 500, // Minimum 500ms between requests
     VERSION: VERSION
 };
 
@@ -71,6 +73,12 @@ const state = {
     currentTaskType: null,   // Track current task type
     worksheetScope: "single", // "single" or "all" - controls multi-sheet access
     selectionHandler: null,  // Reference to selection change event handler
+    // Rate limit tracking
+    rateLimit: {
+        lastRequestTime: 0,  // Timestamp of last API request
+        rateLimitedUntil: 0, // Timestamp until which we're rate limited
+        requestCount: 0      // Number of requests in current window
+    },
     // Preview state
     preview: {
         selections: [],      // boolean[] - selection state for each action
@@ -1016,6 +1024,28 @@ function getTaskTypeBadge(taskType) {
 }
 
 async function callAI(userPrompt) {
+    // Check if we're currently rate limited
+    const now = Date.now();
+    if (state.rateLimit.rateLimitedUntil > now) {
+        const waitTime = Math.ceil((state.rateLimit.rateLimitedUntil - now) / 1000);
+        const errorMsg = `Rate limit active. Please wait ${waitTime} seconds before trying again.`;
+        logWarn(errorMsg);
+        toast(errorMsg);
+        throw new Error(errorMsg);
+    }
+    
+    // Enforce minimum interval between requests
+    const timeSinceLastRequest = now - state.rateLimit.lastRequestTime;
+    if (timeSinceLastRequest < CONFIG.MIN_REQUEST_INTERVAL) {
+        const waitTime = CONFIG.MIN_REQUEST_INTERVAL - timeSinceLastRequest;
+        logDebug(`Throttling request. Waiting ${waitTime}ms`);
+        await new Promise(r => setTimeout(r, waitTime));
+    }
+    
+    // Update last request time
+    state.rateLimit.lastRequestTime = Date.now();
+    state.rateLimit.requestCount++;
+    
     const dataContext = buildDataContext();
     
     // Use AI engine to enhance the prompt with task-specific context
@@ -1055,7 +1085,14 @@ async function callAI(userPrompt) {
             }
         );
         
-        if (!res.ok) throw new Error(`API Error: ${res.status}`);
+        if (!res.ok) {
+            // Handle rate limit response
+            if (res.status === 429) {
+                state.rateLimit.rateLimitedUntil = Date.now() + CONFIG.RATE_LIMIT_DELAY;
+                throw new Error(`API Error: 429 - Rate limit exceeded`);
+            }
+            throw new Error(`API Error: ${res.status}`);
+        }
         
         const data = await res.json();
         
@@ -1687,6 +1724,7 @@ function getErrorMessage(error, context = '') {
 
 /**
  * Retries a function with exponential backoff
+ * Enhanced with better rate limit handling
  */
 async function withRetry(fn, maxRetries = CONFIG.MAX_RETRIES) {
     let lastError;
@@ -1696,12 +1734,28 @@ async function withRetry(fn, maxRetries = CONFIG.MAX_RETRIES) {
         } catch (e) {
             lastError = e;
             const msg = e.message || '';
-            // Only retry on transient errors
-            if (msg.includes('429') || msg.includes('500') || msg.includes('502') || msg.includes('503')) {
-                const delay = CONFIG.RETRY_DELAY * Math.pow(2, i);
+            
+            // Handle rate limit (429) with longer delay
+            if (msg.includes('429')) {
+                const delay = i === 0 ? CONFIG.RATE_LIMIT_DELAY : CONFIG.RATE_LIMIT_DELAY * Math.pow(2, i - 1);
+                logWarn(`Rate limit hit (429). Waiting ${delay}ms before retry ${i + 1}/${maxRetries}`);
+                
+                // Mark as rate limited
+                state.rateLimit.rateLimitedUntil = Date.now() + delay;
+                
                 await new Promise(r => setTimeout(r, delay));
                 continue;
             }
+            
+            // Handle other transient errors with standard exponential backoff
+            if (msg.includes('500') || msg.includes('502') || msg.includes('503')) {
+                const delay = CONFIG.RETRY_DELAY * Math.pow(2, i);
+                logWarn(`Transient error (${msg.match(/\d{3}/)?.[0]}). Waiting ${delay}ms before retry ${i + 1}/${maxRetries}`);
+                await new Promise(r => setTimeout(r, delay));
+                continue;
+            }
+            
+            // Don't retry other errors
             throw e;
         }
     }
