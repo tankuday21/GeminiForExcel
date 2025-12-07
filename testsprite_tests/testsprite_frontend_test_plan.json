@@ -1,0 +1,393 @@
+[
+  {
+    "id": "TC001",
+    "title": "Add-in Load and UI Render Test",
+    "description": "Verify that the Excel AI Copilot add-in loads correctly in all supported Excel versions and renders the full user interface without errors.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Open Microsoft Excel versions 2016, 2019, 2021, 365, and Excel Online."
+      },
+      {
+        "type": "action",
+        "description": "Launch Excel AI Copilot add-in from the Office Add-ins menu."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that the task pane loads without errors and displays the chat interface, settings, preview panel, and diagnostics panel."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that UI elements are responsive and rendered correctly in both light and dark themes."
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Natural Language Command Processing",
+    "description": "Validate that natural language inputs are correctly interpreted and task types are detected accurately by the AI Engine.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Enter a variety of natural language commands describing Excel operations, including formula creation, charting, and data manipulation."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that the AI Engine correctly detects the task type for each command."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm AI responses return structured action XML corresponding to requested Excel operations."
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "AI-Generated Action Preview and Selection",
+    "description": "Ensure that all AI-generated actions are displayed in the preview panel with selectable checkboxes and detailed expandable information.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Submit a natural language request that triggers multiple Excel actions."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that all proposed actions are listed in the preview panel with descriptive text."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that users can expand each action to view details."
+      },
+      {
+        "type": "action",
+        "description": "Select and deselect various actions."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm selections correctly update the list of actions to be applied."
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Execution of Excel Operations Across 87 Action Types",
+    "description": "Validate that each supported Excel operation type executes successfully without errors using Office.js API batch operations.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Trigger AI-generated actions covering all 87 Excel operation types including formulas, charts, PivotTables, formatting, data entry, and others."
+      },
+      {
+        "type": "action",
+        "description": "Apply all selected AI-suggested actions to the workbook."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that all operations execute successfully, changes reflect correctly in Excel, and no errors occur during batch execution."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the workbook state remains consistent and no corruptions are introduced."
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Undo Applied Actions Functionality",
+    "description": "Verify that the undo system correctly reverts the last batch of applied AI-suggested Excel operations without corrupting workbook state.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Apply a batch of AI-generated actions."
+      },
+      {
+        "type": "action",
+        "description": "Initiate undo operation from the history panel."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that all applied changes are reverted accurately."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the workbook returns to the exact state before action application."
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Multi-Sheet and Workbook-Level Context Awareness",
+    "description": "Ensure the add-in correctly reads and operates on multiple worksheets and maintains context across sheets as expected.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Enable multi-sheet mode."
+      },
+      {
+        "type": "action",
+        "description": "Issue natural language commands that require operations spanning multiple sheets, e.g., summarizing data across worksheets."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify Excel Data Reader captures data context from all sheets accurately."
+      },
+      {
+        "type": "assertion",
+        "description": "Check AI Engine responses and generated actions reflect multi-sheet context correctly."
+      },
+      {
+        "type": "action",
+        "description": "Apply selected actions across multiple sheets."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm changes are correctly applied on targeted sheets with preserved context."
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Learning System Behavior Adaptation",
+    "description": "Test that corrections by the user to AI-suggested actions properly update the learning system and AI behavior improves in subsequent requests.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Trigger AI-generated actions with intentional flaws or non-preferred results."
+      },
+      {
+        "type": "action",
+        "description": "Correct or adjust applied changes in Excel manually and indicate correction to the system."
+      },
+      {
+        "type": "action",
+        "description": "Submit similar natural language requests subsequently."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the AI Engine incorporates user corrections and suggests improved or corrected actions."
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Settings Persistence and Application",
+    "description": "Validate changes to add-in settings (API key, AI model, worksheet scope, theme, debug mode) are applied immediately and persisted across sessions.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Open settings panel and modify API key, AI model, worksheet scope, theme (dark/light), and enable debug mode."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that changes apply immediately to the add-in behavior and UI."
+      },
+      {
+        "type": "action",
+        "description": "Close and reopen the add-in."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify all settings persist and remain effective after restarting."
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Diagnostics Panel and Logging Verification",
+    "description": "Ensure that logging captures info, warnings, errors, and debug messages and that logs are accessible, exportable, and properly filtered in the diagnostics panel.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Perform various operations triggering informational logs, warnings, errors, and debug messages with debug mode enabled."
+      },
+      {
+        "type": "action",
+        "description": "Open diagnostics panel."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify logs display correctly with proper levels and timestamps."
+      },
+      {
+        "type": "action",
+        "description": "Use export logs feature."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm that logs are exported successfully in a readable format."
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "API Key Security and Management",
+    "description": "Validate secure storage, obfuscation, and removal of API keys with appropriate user notifications.",
+    "category": "security",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Enter a valid API key in the settings."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the API key is stored securely and obfuscated in the settings UI."
+      },
+      {
+        "type": "action",
+        "description": "Remove the API key via settings."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the key is deleted and no longer used for API requests."
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Error Handling for Invalid API Key",
+    "description": "Ensure graceful handling and user notification when an invalid API key is used.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Set an invalid API key in settings."
+      },
+      {
+        "type": "action",
+        "description": "Submit a natural language command triggering an API request."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the add-in detects the invalid API key error returned by Google Gemini AI API."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that a clear user notification about the invalid key is displayed."
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Network Failure and Retry Logic Handling",
+    "description": "Test the add-in's behavior under network failures including timeouts and verify appropriate user notification and retry capability.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Simulate network failure or timeout during API request."
+      },
+      {
+        "type": "action",
+        "description": "Submit a natural language request triggering AI interaction."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the add-in detects the network failure."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm an appropriate error message is displayed to the user."
+      },
+      {
+        "type": "action",
+        "description": "Retry the request after network restoration."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the retry succeeds and AI-generated actions are received."
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Invalid Request Handling",
+    "description": "Verify the system handles invalid or malformed natural language requests gracefully, providing meaningful error messages or fallback behaviors.",
+    "category": "error handling",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Send empty or nonsensical natural language commands."
+      },
+      {
+        "type": "assertion",
+        "description": "Check the AI Engine recognizes invalid requests and does not crash."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify user is shown a clear message to rephrase or try different input."
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Keyboard Shortcuts and Responsive UI Test",
+    "description": "Verify all declared keyboard shortcuts function correctly and the UI remains responsive on various device sizes and window resizing.",
+    "category": "ui",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Use keyboard shortcuts for sending commands, opening settings, undoing actions, and toggling diagnostics."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm each shortcut triggers the intended functionality without side effects."
+      },
+      {
+        "type": "action",
+        "description": "Resize the task pane window and test on different screen resolutions."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify UI elements adjust layout correctly and remain usable."
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Performance Testing for AI Response and Batch Action Execution",
+    "description": "Ensure AI request responses and batch Excel operations complete within acceptable time frames under typical workload scenarios.",
+    "category": "performance",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Send typical natural language commands involving multiple actions."
+      },
+      {
+        "type": "assertion",
+        "description": "Measure AI response time and verify it completes within target latency (e.g., under 5 seconds)."
+      },
+      {
+        "type": "action",
+        "description": "Apply batch operations returned by AI."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm batch execution is completed within acceptable duration without UI freezing."
+      }
+    ]
+  }
+]

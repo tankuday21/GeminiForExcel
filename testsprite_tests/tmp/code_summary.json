@@ -1,0 +1,79 @@
+{
+  "tech_stack": [
+    "JavaScript (ES6+)",
+    "Office.js API",
+    "Google Gemini AI API",
+    "Webpack 5",
+    "Jest",
+    "HTML5/CSS3",
+    "Babel",
+    "ESLint"
+  ],
+  "features": [
+    {
+      "name": "Main Task Pane Application",
+      "description": "Core UI and application logic for the Excel AI Copilot add-in. Manages chat interface, settings, theme, conversation history, and coordinates between AI engine and Excel operations.",
+      "files": [
+        "src/taskpane/taskpane.js",
+        "src/taskpane/taskpane.html",
+        "src/taskpane/taskpane.css"
+      ]
+    },
+    {
+      "name": "AI Engine",
+      "description": "Advanced AI capabilities including task type detection, task-specific prompts, function calling, RAG (Retrieval Augmented Generation), multi-step reasoning, and learning from corrections. Handles communication with Google Gemini AI API.",
+      "files": [
+        "src/taskpane/ai-engine.js",
+        "src/taskpane/ai-engine.test.js"
+      ]
+    },
+    {
+      "name": "Action Executor",
+      "description": "Executes Excel operations including formulas, charts, formatting, tables, PivotTables, slicers, data manipulation, shapes, comments, sparklines, worksheet management, page setup, and more. Handles 87 different action types.",
+      "files": [
+        "src/taskpane/action-executor.js",
+        "src/taskpane/action-executor.test.js",
+        "src/taskpane/action-executor.integration.test.js",
+        "src/taskpane/action-executor.performance.test.js"
+      ]
+    },
+    {
+      "name": "Excel Data Reader",
+      "description": "Reads and processes Excel data from worksheets. Handles data context building, header detection, column mapping, selection monitoring, and multi-sheet support.",
+      "files": [
+        "src/taskpane/excel-data.js"
+      ]
+    },
+    {
+      "name": "Preview System",
+      "description": "Provides preview functionality for AI-generated actions before applying them. Allows users to select/deselect actions, expand details, and highlight locations in Excel.",
+      "files": [
+        "src/taskpane/preview.js",
+        "src/taskpane/preview.test.js"
+      ]
+    },
+    {
+      "name": "History and Undo",
+      "description": "Manages action history and undo functionality. Tracks executed actions, allows reverting changes, and maintains history panel UI.",
+      "files": [
+        "src/taskpane/history.js",
+        "src/taskpane/history.test.js"
+      ]
+    },
+    {
+      "name": "Diagnostics System",
+      "description": "Comprehensive logging and debugging system. Provides debug mode, log levels (info, warn, error, debug), log export, and diagnostics panel UI.",
+      "files": [
+        "src/taskpane/diagnostics.js"
+      ]
+    },
+    {
+      "name": "Commands",
+      "description": "Office add-in commands for ribbon integration and command execution.",
+      "files": [
+        "src/commands/commands.js",
+        "src/commands/commands.html"
+      ]
+    }
+  ]
+}

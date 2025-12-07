@@ -42,6 +42,8 @@ describe("AI Engine", () => {
         test("detects validation tasks", () => {
             expect(detectTaskType("Create a dropdown")).toBe(TASK_TYPES.VALIDATION);
             expect(detectTaskType("Add validation")).toBe(TASK_TYPES.VALIDATION);
+            expect(detectTaskType("Add dropdown")).toBe(TASK_TYPES.VALIDATION);
+            expect(detectTaskType("Make dropdown")).toBe(TASK_TYPES.VALIDATION);
         });
 
         test("detects table tasks", () => {
@@ -326,6 +328,8 @@ describe("AI Engine", () => {
 
         test("detects textsplit as formula task", () => {
             expect(detectTaskType("split text by delimiter")).toBe(TASK_TYPES.FORMULA);
+            expect(detectTaskType("text split")).toBe(TASK_TYPES.FORMULA);
+            expect(detectTaskType("separate text")).toBe(TASK_TYPES.FORMULA);
         });
 
         test("detects dynamic array as formula task", () => {

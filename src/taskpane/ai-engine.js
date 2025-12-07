@@ -53,7 +53,8 @@ const TASK_KEYWORDS = {
         "named range", "name range", "define name", "create name", "range name",
         "filter", "sort", "sortby", "unique", "sequence", "randarray", "xmatch",
         "groupby", "pivotby", "choosecols", "chooserows", "take", "drop",
-        "textsplit", "textbefore", "textafter", "dynamic array", "spill"
+        "textsplit", "textbefore", "textafter", "dynamic array", "spill",
+        "split text", "text split", "split by delimiter", "separate text"
     ],
     [TASK_TYPES.CHART]: [
         "chart", "graph", "visualize", "plot", "pie", "bar", "line", "column",
@@ -76,7 +77,8 @@ const TASK_KEYWORDS = {
     ],
     [TASK_TYPES.VALIDATION]: [
         "dropdown", "validation", "list", "restrict", "allow", "select from",
-        "choices", "options", "pick list"
+        "choices", "options", "pick list", "create a dropdown", "add dropdown",
+        "create dropdown", "make dropdown", "data validation"
     ],
     /**
      * TABLE Task Type

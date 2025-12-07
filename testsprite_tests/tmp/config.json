@@ -1,7 +1,32 @@
 {
-  "status": "init",
-  "scope": "codebase",
+  "status": "commited",
   "type": "frontend",
-  "localEndpoint": "http://localhost:3000/",
-  "serverPort": 51868
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:3000/taskpane.html",
+  "executionArgs": {
+    "projectName": "GeminiForExcel",
+    "projectPath": "C:\\Users\\user\\Downloads\\GeminiForExcel\\GeminiForExcel",
+    "testIds": [
+      "TC001",
+      "TC002",
+      "TC003",
+      "TC004",
+      "TC005",
+      "TC006",
+      "TC007",
+      "TC008",
+      "TC009",
+      "TC010",
+      "TC011",
+      "TC012",
+      "TC013",
+      "TC014",
+      "TC015"
+    ],
+    "additionalInstruction": "",
+    "envs": {
+      "API_KEY": "sk-user-v6Xj3AvB-mhiPq0DISAF-Jf7jzeky0DoaL3MevEIIfyVVwAVU50jBRTz9TygpGQw1hO7ta7NeVsKucVuFKE4fjobI_QcTKRxn6bWeKZ2KbD7jzVwLMKrUWd89QncGI4dT4k"
+    }
+  },
+  "proxy": "http://439232ce-7cd0-4520-911f-c3c5b757e901:zn4DAhbt2WZfTP7rcodZpdUQtMTc753a@tun.testsprite.com:8080"
 }

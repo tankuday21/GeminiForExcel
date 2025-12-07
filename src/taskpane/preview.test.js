@@ -441,7 +441,7 @@ describe('Preview Panel - Property Based Tests', () => {
         });
 
         test('ACTION_TYPES contains expected count', () => {
-            expect(ACTION_TYPES.length).toBe(87);
+            expect(ACTION_TYPES.length).toBe(90);
         });
     });
 
