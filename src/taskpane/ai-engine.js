@@ -794,8 +794,8 @@ When entering data, consider applying appropriate formatting:
 After data entry, consider conditional formatting for validation (highlight duplicates, flag out-of-range values with color scales or icon sets).
 
 ## STRUCTURED DATA OPTIONS
-- Simple values: `values` action.
-- Multi-attribute (SKU/Price/Stock): `insertDataType` for entity cards.
+- Simple values: \`values\` action.
+- Multi-attribute (SKU/Price/Stock): \`insertDataType\` for entity cards.
 - Choose based on complexity: entities for hover properties, values for plain cells.`,
 
     [TASK_TYPES.TABLE]: `You are an Excel Table Expert. Your specialty is creating and managing Excel Tables (structured data ranges).
