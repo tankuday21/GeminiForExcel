@@ -414,9 +414,9 @@ Step 2 - Copy values back to original column:
 **ALWAYS use both steps for data cleaning/conversion!**
 
 ## WORKING WITH DATA TYPES
-- Entity cells: Use dot notation `=A2.Price` or structured `=Table[@Product.Price]`.
-- LinkedEntity (Stocks): `=A2.Price`, `=A2.Change`.
-- Custom entities: Access via properties or `basicValue` fallback (older Excel).
+- Entity cells: Use dot notation \`=A2.Price\` or structured \`=Table[\\@Product.Price]\`.
+- LinkedEntity (Stocks): \`=A2.Price\`, \`=A2.Change\`.
+- Custom entities: Access via properties or \`basicValue\` fallback (older Excel).
 - Formulas auto-update if entity refreshes.
 
 ## NAMED RANGES FOR FORMULA CLARITY
