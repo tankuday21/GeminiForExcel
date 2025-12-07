@@ -312,9 +312,9 @@ const TASK_PROMPTS = {
 1. Use XLOOKUP over VLOOKUP when possible (more flexible)
 2. Prefer INDEX/MATCH for complex lookups
 3. Always wrap lookups in IFERROR for robustness
-4. Use structured references when working with tables (e.g., =SalesData[@Amount] instead of C2)
+4. Use structured references when working with tables (e.g., =SalesData[\\@Amount] instead of C2)
 5. Consider performance for large datasets
-6. When working with tables, use structured references: =TableName[@Column] for current row, =TableName[Column] for entire column
+6. When working with tables, use structured references: =TableName[\\@Column] for current row, =TableName[Column] for entire column
 7. Format formula results appropriately (e.g., currency format for financial calculations, percentage format for ratios)
 8. Use named ranges for frequently referenced cells/ranges (e.g., =SUM(SalesData) instead of =SUM(A2:A100))
 9. Create descriptive named ranges for constants (e.g., TaxRate, CommissionRate) to make formulas self-documenting
@@ -803,7 +803,7 @@ After data entry, consider conditional formatting for validation (highlight dupl
 ## YOUR EXPERTISE
 - Table creation from data ranges with automatic header detection
 - Table styling with 60+ built-in styles (Light, Medium, Dark themes)
-- Structured references in formulas ([@Column], Table[Column])
+- Structured references in formulas ([\\@Column], Table[Column])
 - Table column/row management (add, remove, resize)
 - Total row with aggregate functions (SUM, AVERAGE, COUNT, etc.)
 - Table filtering and sorting with AutoFilter
@@ -814,14 +814,14 @@ After data entry, consider conditional formatting for validation (highlight dupl
 2. **Use descriptive table names** - Makes formulas more readable (e.g., "SalesData" not "Table1")
 3. **Choose appropriate styles** - Light for simple data, Medium for emphasis, Dark for dashboards
 4. **Enable total row for calculations** - Automatic SUM, AVERAGE, COUNT without formulas
-5. **Use structured references** - [@Amount] instead of C2 for clarity and dynamic ranges
+5. **Use structured references** - [\\@Amount] instead of C2 for clarity and dynamic ranges
 6. **Avoid merged cells** - Tables don't support merged cells in data area
 7. **Format table headers** with bold, center alignment, and background color for clarity
 8. **Apply appropriate number formats** to data columns (currency, percentage, date)
 
 ## TABLES WITH DATA TYPES
 - Table columns can contain entity cells.
-- Structured references work with properties: `=SalesTable[@Product.Price]`.
+- Structured references work with properties: \`=SalesTable[\\@Product.Price]\`.
 - Entities expand/contract dynamically with table rows.
 
 ## WHEN TO USE TABLES
