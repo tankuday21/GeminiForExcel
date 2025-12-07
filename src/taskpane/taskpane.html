@@ -23,18 +23,7 @@
                         <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
                     </svg>
                 </button>
-                <button class="icon-btn" id="historyBtn" title="History">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-                    </svg>
-                </button>
-                <!-- Comment 10: Diagnostics Button -->
-                <button class="icon-btn" id="diagnosticsBtn" title="Diagnostics">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                        <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
-                    </svg>
-                </button>
+
                 <button class="icon-btn" id="clearBtn" title="Clear">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -90,32 +79,7 @@
                 <div id="previewList" class="preview-list"></div>
             </div>
             
-            <div id="historyPanel" class="history-panel" style="display: none;">
-                <div class="history-header">
-                    <span class="history-title">Action History</span>
-                </div>
-                <div id="historyList" class="history-list"></div>
-            </div>
-            
-            <!-- Comment 10: Diagnostics Panel -->
-            <div id="diagnosticsPanel" class="diagnostics-panel" style="display: none;">
-                <div class="diagnostics-header">
-                    <span class="diagnostics-title">Diagnostics</span>
-                    <div class="diagnostics-actions">
-                        <button class="icon-btn-sm" id="clearLogsBtn" title="Clear Logs">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-                            </svg>
-                        </button>
-                        <button class="icon-btn-sm" id="toggleDebugBtn" title="Toggle Debug Mode">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-                <div id="diagnosticsList" class="diagnostics-list"></div>
-            </div>
+
         </main>
 
         <div class="context-bar">
@@ -194,28 +158,7 @@
                     <p class="hint">Active Sheet Only: AI sees only the current sheet. All Sheets: AI can access all sheets in the workbook.</p>
                 </div>
                 
-                <div class="settings-section">
-                    <label>AI Learning</label>
-                    <p class="hint">The AI learns from your corrections to improve future suggestions.</p>
-                    <button class="btn-secondary" id="clearPrefsBtn">Clear Learned Preferences</button>
-                </div>
-                
-                <!-- Comment 8: API Key Management -->
-                <div class="settings-section">
-                    <label>Security</label>
-                    <p class="hint">API keys are stored with basic obfuscation. For maximum security, remove the key when not in use.</p>
-                    <button class="btn-secondary btn-danger" id="removeApiKeyBtn">Remove API Key</button>
-                </div>
-                
-                <!-- Comment 10: Debug Mode Toggle -->
-                <div class="settings-section">
-                    <label>Diagnostics</label>
-                    <p class="hint">Enable debug mode to see detailed logs and troubleshoot issues.</p>
-                    <label class="mode-label">
-                        <input type="checkbox" id="debugModeCheckbox">
-                        <span>Enable Debug Mode</span>
-                    </label>
-                </div>
+
                 
                 <!-- Update Section -->
                 <div class="settings-section">

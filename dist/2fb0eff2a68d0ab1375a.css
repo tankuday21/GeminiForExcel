@@ -88,12 +88,12 @@ body {
     height: 100vh;
 }
 
-/* Header - Glassmorphism */
+/* Header - Compact */
 .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 20px;
+    padding: 8px 12px;
     background: var(--glass-bg);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -106,17 +106,16 @@ body {
 .brand {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     font-weight: 600;
-    font-size: 15px;
+    font-size: 13px;
 }
 
 .logo {
-    width: 24px;
-    height: 24px;
+    width: 18px;
+    height: 18px;
     color: var(--primary);
     filter: drop-shadow(0 2px 4px rgba(0, 120, 212, 0.3));
-    animation: float 3s ease-in-out infinite;
 }
 
 @keyframes float {
@@ -126,15 +125,15 @@ body {
 
 .header-actions {
     display: flex;
-    gap: 4px;
+    gap: 2px;
 }
 
 .icon-btn {
-    width: 36px;
-    height: 36px;
+    width: 28px;
+    height: 28px;
     border: none;
     background: transparent;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -169,8 +168,8 @@ body {
 }
 
 .icon-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
 }
 
 .icon-btn-sm {
@@ -222,26 +221,25 @@ body {
     z-index: 1;
 }
 
-/* Welcome */
+/* Welcome - Compact */
 .welcome {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 32px 20px;
+    padding: 16px 12px;
     text-align: center;
 }
 
 .welcome-icon {
-    width: 72px;
-    height: 72px;
+    width: 48px;
+    height: 48px;
     background: var(--primary-gradient);
-    border-radius: 20px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
     box-shadow: var(--shadow-lg);
-    animation: pulse 2s ease-in-out infinite;
     position: relative;
 }
 
@@ -262,41 +260,41 @@ body {
 }
 
 .welcome-icon svg {
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     color: #fff;
 }
 
 .welcome h1 {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 
 .welcome p {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-2);
     max-width: 240px;
-    margin-bottom: 24px;
+    margin-bottom: 12px;
 }
 
 .suggestions {
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .suggestions button {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     width: 100%;
-    padding: 14px 16px;
+    padding: 10px 12px;
     background: var(--bg-alt);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
-    font-size: 13px;
+    border-radius: 8px;
+    font-size: 12px;
     color: var(--text);
     cursor: pointer;
     text-align: left;
@@ -335,12 +333,12 @@ body {
     flex-shrink: 0;
 }
 
-/* Chat */
+/* Chat - Compact */
 .chat {
     display: none;
     flex-direction: column;
-    padding: 16px;
-    gap: 12px;
+    padding: 10px 12px;
+    gap: 8px;
 }
 
 .chat:not(:empty) {
@@ -363,13 +361,13 @@ body {
 }
 
 .msg-avatar {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     flex-shrink: 0;
     box-shadow: var(--shadow-sm);
@@ -394,10 +392,10 @@ body {
 
 .msg-body {
     max-width: 85%;
-    padding: 12px 16px;
-    border-radius: 16px;
+    padding: 8px 12px;
+    border-radius: 12px;
     font-size: 13px;
-    line-height: 1.6;
+    line-height: 1.5;
     box-shadow: var(--shadow-sm);
     animation: slideIn 0.3s ease;
 }
@@ -482,17 +480,17 @@ body {
     40% { transform: scale(1); opacity: 1; }
 }
 
-/* Context Bar - Glassmorphism */
+/* Context Bar - Compact */
 .context-bar {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
+    gap: 8px;
+    padding: 6px 12px;
     background: var(--glass-bg);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     border-top: 1px solid var(--glass-border);
-    font-size: 12px;
+    font-size: 11px;
     box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
 }
 
@@ -550,9 +548,9 @@ body {
     text-overflow: ellipsis;
 }
 
-/* Input Area - 3D Elevated */
+/* Input Area - Compact */
 .input-area {
-    padding: 16px 20px 20px;
+    padding: 10px 12px 12px;
     background: var(--glass-bg);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -565,11 +563,11 @@ body {
 .input-box {
     display: flex;
     align-items: flex-end;
-    gap: 10px;
+    gap: 8px;
     background: var(--bg-alt);
     border: 2px solid var(--border);
-    border-radius: 16px;
-    padding: 12px 12px 12px 18px;
+    border-radius: 12px;
+    padding: 8px 8px 8px 12px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: var(--shadow-sm);
 }
@@ -597,11 +595,11 @@ body {
 }
 
 .send-btn {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     border: none;
     background: var(--primary-gradient);
-    border-radius: 12px;
+    border-radius: 10px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -688,12 +686,12 @@ body {
 
 .apply-btn {
     flex: 1;
-    padding: 12px;
+    padding: 8px;
     border: none;
     background: linear-gradient(135deg, var(--success) 0%, #0e9f0e 100%);
-    border-radius: 10px;
+    border-radius: 8px;
     color: #fff;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1593,14 +1591,14 @@ body {
     height: 10px;
 }
 
-/* Version Badge */
+/* Version Badge - Compact */
 .version-badge {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 500;
     color: var(--text-3);
     background: var(--bg-alt);
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: 2px 4px;
+    border-radius: 3px;
     margin-left: 4px;
 }
 
