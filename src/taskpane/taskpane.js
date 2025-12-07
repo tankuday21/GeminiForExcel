@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "3.6.0";
+const VERSION = "3.6.1";
 
 import {
     detectTaskType,
@@ -1040,46 +1040,48 @@ async function callAI(userPrompt) {
     const contents = [...state.conversationHistory];
     contents.push({ role: "user", parts: [{ text: fullUserMessage }] });
     
-    // Use retry logic for transient errors
-    const response = await withRetry(async () => {
-        const res = await fetch(
-            `${CONFIG.API_ENDPOINT}${CONFIG.GEMINI_MODEL}:generateContent?key=${state.apiKey}`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    systemInstruction: { parts: [{ text: systemPrompt }] },
-                    contents,
-                    generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
-                })
-            }
-        );
-        
-        if (!res.ok) throw new Error(`API Error: ${res.status}`);
-        
-        const data = await res.json();
-        
-        // Comment 5: Use robust response extraction
-        const extracted = extractResponseText(data);
-        
-        if (extracted.error) {
-            logWarn(`AI response issue: ${extracted.error}`);
-            if (extracted.blocked) {
-                throw new Error(extracted.error);
-            }
-            // Show toast for empty responses
-            toast(extracted.error);
-            return extracted.error;
+    // Make API call without retry logic - let errors through
+    const res = await fetch(
+        `${CONFIG.API_ENDPOINT}${CONFIG.GEMINI_MODEL}:generateContent?key=${state.apiKey}`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                contents,
+                generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
+            })
         }
-        
-        if (!extracted.text) {
-            logWarn("AI returned no content");
-            toast("AI returned no content");
-            return "No response from AI";
+    );
+    
+    if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        const errorMessage = errorData.error?.message || `HTTP ${res.status}`;
+        throw new Error(`API Error: ${errorMessage}`);
+    }
+    
+    const data = await res.json();
+    
+    // Comment 5: Use robust response extraction
+    const extracted = extractResponseText(data);
+    
+    if (extracted.error) {
+        logWarn(`AI response issue: ${extracted.error}`);
+        if (extracted.blocked) {
+            throw new Error(extracted.error);
         }
-        
-        return extracted.text;
-    });
+        // Show toast for empty responses
+        toast(extracted.error);
+        return extracted.error;
+    }
+    
+    if (!extracted.text) {
+        logWarn("AI returned no content");
+        toast("AI returned no content");
+        return "No response from AI";
+    }
+    
+    const response = extracted.text;
     
     // Store response for potential correction learning
     state.lastAIResponse = response;
@@ -1659,15 +1661,13 @@ function isValidRange(address) {
 function getErrorMessage(error, context = '') {
     const msg = error.message || String(error);
     
-    // API errors
+    // API errors - show actual error message instead of generic ones
     if (msg.includes('401') || msg.includes('403')) {
         return 'Invalid API key. Please check your settings.';
     }
-    if (msg.includes('429')) {
-        return 'Rate limit exceeded. Please wait a moment and try again.';
-    }
+    // Removed 429 rate limit check - show actual error
     if (msg.includes('500') || msg.includes('502') || msg.includes('503')) {
-        return 'AI service temporarily unavailable. Retrying...';
+        return 'AI service temporarily unavailable. Please try again.';
     }
     if (msg.includes('network') || msg.includes('fetch')) {
         return 'Network error. Please check your connection.';
@@ -1681,12 +1681,13 @@ function getErrorMessage(error, context = '') {
         return 'Excel error. Please try again.';
     }
     
-    // Generic
-    return msg.length > 100 ? msg.substring(0, 100) + '...' : msg;
+    // Generic - show full error message
+    return msg;
 }
 
 /**
  * Retries a function with exponential backoff
+ * Removed 429 rate limiting - only retry on server errors
  */
 async function withRetry(fn, maxRetries = CONFIG.MAX_RETRIES) {
     let lastError;
@@ -1696,8 +1697,8 @@ async function withRetry(fn, maxRetries = CONFIG.MAX_RETRIES) {
         } catch (e) {
             lastError = e;
             const msg = e.message || '';
-            // Only retry on transient errors
-            if (msg.includes('429') || msg.includes('500') || msg.includes('502') || msg.includes('503')) {
+            // Only retry on server errors (not rate limits)
+            if (msg.includes('500') || msg.includes('502') || msg.includes('503')) {
                 const delay = CONFIG.RETRY_DELAY * Math.pow(2, i);
                 await new Promise(r => setTimeout(r, delay));
                 continue;
