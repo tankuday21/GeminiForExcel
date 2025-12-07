@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "3.5.7";
+const VERSION = "3.5.8";
 
 import {
     detectTaskType,
@@ -2053,7 +2053,35 @@ async function executeAction(ctx, sheet, action) {
         "deleteSlicer",          // target is slicer name
         "deleteNamedRange",      // target is named range name
         "updateNamedRange",      // target is named range name
-        "listNamedRanges"        // target is scope option
+        "listNamedRanges",       // target is scope option
+        "formatShape",           // target is shape name
+        "deleteShape",           // target is shape name
+        "groupShapes",           // target is shape names (comma-separated)
+        "arrangeShapes",         // target is shape name
+        "ungroupShapes",         // target is group name
+        "addComment",            // target is cell address (comment API handles it)
+        "addNote",               // target is cell address (note API handles it)
+        "editComment",           // target is cell with comment
+        "editNote",              // target is cell with note
+        "deleteComment",         // target is cell with comment
+        "deleteNote",            // target is cell with note
+        "replyToComment",        // target is cell with parent comment
+        "resolveComment",        // target is cell with comment
+        "createSparkline",       // target is location cell/range
+        "configureSparkline",    // target is sparkline location
+        "deleteSparkline",       // target is sparkline location
+        "renameSheet",           // target is sheet name
+        "moveSheet",             // target is sheet name
+        "hideSheet",             // target is sheet name
+        "unhideSheet",           // target is sheet name
+        "unfreezePane",          // target is "current" or sheet name
+        "setZoom",               // target is "current" or sheet name
+        "createView",            // target is view name
+        "setPageSetup",          // target is sheet name
+        "setPageMargins",        // target is sheet name
+        "setPageOrientation",    // target is sheet name
+        "setHeaderFooter",       // target is sheet name
+        "setPageBreaks"          // target is sheet name
     ];
     
     // Only pre-load range for actions that actually need it
@@ -2246,6 +2274,154 @@ async function executeAction(ctx, sheet, action) {
             
         case "listNamedRanges":
             await listNamedRanges(ctx, sheet, action);
+            break;
+            
+        case "protectWorksheet":
+            await protectWorksheet(ctx, sheet, action);
+            break;
+            
+        case "unprotectWorksheet":
+            await unprotectWorksheet(ctx, sheet, action);
+            break;
+            
+        case "protectRange":
+            await protectRange(ctx, sheet, action);
+            break;
+            
+        case "unprotectRange":
+            await unprotectRange(ctx, sheet, action);
+            break;
+            
+        case "protectWorkbook":
+            await protectWorkbook(ctx, sheet, action);
+            break;
+            
+        case "unprotectWorkbook":
+            await unprotectWorkbook(ctx, sheet, action);
+            break;
+            
+        case "insertShape":
+            await insertShape(ctx, sheet, action);
+            break;
+            
+        case "insertImage":
+            await insertImage(ctx, sheet, action);
+            break;
+            
+        case "insertTextBox":
+            await insertTextBox(ctx, sheet, action);
+            break;
+            
+        case "formatShape":
+            await formatShape(ctx, sheet, target, data);
+            break;
+            
+        case "deleteShape":
+            await deleteShape(ctx, sheet, target);
+            break;
+            
+        case "groupShapes":
+            await groupShapes(ctx, sheet, action);
+            break;
+            
+        case "arrangeShapes":
+            await arrangeShapes(ctx, sheet, target, data);
+            break;
+            
+        case "ungroupShapes":
+            await ungroupShapes(ctx, sheet, target);
+            break;
+            
+        case "addComment":
+            await addComment(ctx, sheet, action);
+            break;
+            
+        case "addNote":
+            await addNote(ctx, sheet, action);
+            break;
+            
+        case "editComment":
+            await editComment(ctx, sheet, action);
+            break;
+            
+        case "editNote":
+            await editNote(ctx, sheet, action);
+            break;
+            
+        case "deleteComment":
+            await deleteComment(ctx, sheet, action);
+            break;
+            
+        case "deleteNote":
+            await deleteNote(ctx, sheet, action);
+            break;
+            
+        case "replyToComment":
+            await replyToComment(ctx, sheet, action);
+            break;
+            
+        case "resolveComment":
+            await resolveComment(ctx, sheet, action);
+            break;
+            
+        case "createSparkline":
+            await createSparkline(ctx, sheet, action);
+            break;
+            
+        case "configureSparkline":
+            await configureSparkline(ctx, sheet, action);
+            break;
+            
+        case "deleteSparkline":
+            await deleteSparkline(ctx, sheet, action);
+            break;
+            
+        case "renameSheet":
+            await renameSheet(ctx, sheet, action);
+            break;
+            
+        case "moveSheet":
+            await moveSheet(ctx, sheet, action);
+            break;
+            
+        case "hideSheet":
+            await hideSheet(ctx, sheet, action);
+            break;
+            
+        case "unhideSheet":
+            await unhideSheet(ctx, sheet, action);
+            break;
+            
+        case "freezePanes":
+            await freezePanes(ctx, sheet, action);
+            break;
+            
+        case "unfreezePane":
+            await unfreezePane(ctx, sheet, action);
+            break;
+            
+        case "setZoom":
+            await setZoom(ctx, sheet, action);
+            break;
+            
+        case "splitPane":
+            await splitPane(ctx, sheet, action);
+            break;
+            
+        case "createView":
+            await createView(ctx, sheet, action);
+            break;
+            
+        case "addHyperlink":
+            await addHyperlink(ctx, range, data);
+            break;
+            
+        case "removeHyperlink":
+            await removeHyperlink(ctx, range);
+            break;
+            
+        case "editHyperlink":
+            await editHyperlink(ctx, range, data);
             break;
             
         default:
@@ -3130,6 +3306,378 @@ async function createChart(ctx, sheet, dataRange, action) {
     if (ct.includes("line") || ct.includes("trend")) {
         chart.legend.position = Excel.ChartLegendPosition.bottom;
     }
+    
+    console.log(`Created ${ct} chart at ${position}`);
+    
+    // Parse advanced chart options from action.data
+    // Supports both JSON string (from AI-generated ACTION tags) and plain objects (programmatic calls)
+    let advancedOptions = {};
+    if (action.data) {
+        if (typeof action.data === "string") {
+            try {
+                advancedOptions = JSON.parse(action.data);
+            } catch (e) {
+                console.log(`Warning: Could not parse advanced chart options: ${e.message}`);
+            }
+        } else if (typeof action.data === "object") {
+            advancedOptions = action.data;
+        }
+    }
+    
+    // Check if any series-level operations are needed (trendlines, dataLabels, comboSeries)
+    const needsSeriesLoad = (advancedOptions.trendlines && Array.isArray(advancedOptions.trendlines) && advancedOptions.trendlines.length > 0) ||
+                           advancedOptions.dataLabels ||
+                           (advancedOptions.comboSeries && Array.isArray(advancedOptions.comboSeries) && advancedOptions.comboSeries.length > 0);
+    
+    // Load series once if needed for any series-level operations
+    if (needsSeriesLoad) {
+        chart.series.load("items");
+        await ctx.sync();
+    }
+    
+    // ========== Trendline Support ==========
+    if (advancedOptions.trendlines && Array.isArray(advancedOptions.trendlines) && advancedOptions.trendlines.length > 0) {
+        try {
+            const trendlineTypeMap = {
+                "Linear": Excel.ChartTrendlineType.linear,
+                "Exponential": Excel.ChartTrendlineType.exponential,
+                "Polynomial": Excel.ChartTrendlineType.polynomial,
+                "MovingAverage": Excel.ChartTrendlineType.movingAverage
+            };
+            
+            for (const trendlineConfig of advancedOptions.trendlines) {
+                const seriesIndex = trendlineConfig.seriesIndex || 0;
+                const trendlineType = trendlineConfig.type || "Linear";
+                
+                if (seriesIndex >= 0 && seriesIndex < chart.series.items.length) {
+                    const series = chart.series.items[seriesIndex];
+                    const trendline = series.trendlines.add(trendlineTypeMap[trendlineType] || Excel.ChartTrendlineType.linear);
+                    
+                    if (trendlineType === "MovingAverage" && trendlineConfig.period) {
+                        trendline.movingAveragePeriod = trendlineConfig.period;
+                    }
+                    if (trendlineType === "Polynomial" && trendlineConfig.order) {
+                        trendline.polynomialOrder = trendlineConfig.order;
+                    }
+                    
+                    console.log(`Added ${trendlineType} trendline to series ${seriesIndex}`);
+                } else {
+                    console.log(`Warning: Invalid seriesIndex ${seriesIndex} for trendline, skipping`);
+                }
+            }
+        } catch (e) {
+            console.log(`Warning: Trendline customization error: ${e.message}`);
+        }
+    }
+    
+    // ========== Data Label Customization ==========
+    if (advancedOptions.dataLabels) {
+        try {
+            
+            const dataLabelPositionMap = {
+                "Center": Excel.ChartDataLabelPosition.center,
+                "InsideEnd": Excel.ChartDataLabelPosition.insideEnd,
+                "OutsideEnd": Excel.ChartDataLabelPosition.outsideEnd,
+                "InsideBase": Excel.ChartDataLabelPosition.insideBase,
+                "BestFit": Excel.ChartDataLabelPosition.bestFit,
+                "Left": Excel.ChartDataLabelPosition.left,
+                "Right": Excel.ChartDataLabelPosition.right,
+                "Top": Excel.ChartDataLabelPosition.top,
+                "Bottom": Excel.ChartDataLabelPosition.bottom
+            };
+            
+            for (const series of chart.series.items) {
+                series.hasDataLabels = true;
+                const labels = series.dataLabels;
+                
+                if (advancedOptions.dataLabels.position && dataLabelPositionMap[advancedOptions.dataLabels.position]) {
+                    labels.position = dataLabelPositionMap[advancedOptions.dataLabels.position];
+                }
+                if (advancedOptions.dataLabels.showValue !== undefined) {
+                    labels.showValue = advancedOptions.dataLabels.showValue;
+                }
+                if (advancedOptions.dataLabels.showSeriesName !== undefined) {
+                    labels.showSeriesName = advancedOptions.dataLabels.showSeriesName;
+                }
+                if (advancedOptions.dataLabels.showCategoryName !== undefined) {
+                    labels.showCategoryName = advancedOptions.dataLabels.showCategoryName;
+                }
+                if (advancedOptions.dataLabels.showLegendKey !== undefined) {
+                    labels.showLegendKey = advancedOptions.dataLabels.showLegendKey;
+                }
+                if (advancedOptions.dataLabels.showPercentage !== undefined) {
+                    labels.showPercentage = advancedOptions.dataLabels.showPercentage;
+                }
+                if (advancedOptions.dataLabels.numberFormat) {
+                    labels.numberFormat = advancedOptions.dataLabels.numberFormat;
+                }
+                
+                // Font formatting for data labels
+                if (advancedOptions.dataLabels.format && advancedOptions.dataLabels.format.font) {
+                    const font = advancedOptions.dataLabels.format.font;
+                    if (font.bold !== undefined) labels.format.font.bold = font.bold;
+                    if (font.color) labels.format.font.color = font.color;
+                    if (font.size) labels.format.font.size = font.size;
+                }
+            }
+            
+            console.log(`Applied data labels: position=${advancedOptions.dataLabels.position || 'default'}`);
+        } catch (e) {
+            console.log(`Warning: Data label customization error: ${e.message}`);
+        }
+    }
+    
+    // ========== Axis Formatting ==========
+    if (advancedOptions.axes) {
+        try {
+            const displayUnitMap = {
+                "Hundreds": Excel.ChartAxisDisplayUnit.hundreds,
+                "Thousands": Excel.ChartAxisDisplayUnit.thousands,
+                "TenThousands": Excel.ChartAxisDisplayUnit.tenThousands,
+                "HundredThousands": Excel.ChartAxisDisplayUnit.hundredThousands,
+                "Millions": Excel.ChartAxisDisplayUnit.millions,
+                "TenMillions": Excel.ChartAxisDisplayUnit.tenMillions,
+                "HundredMillions": Excel.ChartAxisDisplayUnit.hundredMillions,
+                "Billions": Excel.ChartAxisDisplayUnit.billions
+            };
+            
+            // Category axis (X-axis)
+            if (advancedOptions.axes.category) {
+                const catAxis = chart.axes.categoryAxis;
+                const catConfig = advancedOptions.axes.category;
+                
+                if (catConfig.title) {
+                    catAxis.title.text = catConfig.title;
+                    catAxis.title.visible = true;
+                }
+                if (catConfig.gridlines !== undefined) {
+                    catAxis.majorGridlines.visible = catConfig.gridlines;
+                }
+                if (catConfig.format && catConfig.format.font) {
+                    const font = catConfig.format.font;
+                    if (font.bold !== undefined) catAxis.format.font.bold = font.bold;
+                    if (font.color) catAxis.format.font.color = font.color;
+                    if (font.size) catAxis.format.font.size = font.size;
+                }
+                
+                console.log(`Applied category axis formatting: title="${catConfig.title || 'none'}"`);
+            }
+            
+            // Value axis (Y-axis)
+            if (advancedOptions.axes.value) {
+                const valAxis = chart.axes.valueAxis;
+                const valConfig = advancedOptions.axes.value;
+                
+                if (valConfig.title) {
+                    valAxis.title.text = valConfig.title;
+                    valAxis.title.visible = true;
+                }
+                if (valConfig.displayUnit && displayUnitMap[valConfig.displayUnit]) {
+                    valAxis.displayUnit = displayUnitMap[valConfig.displayUnit];
+                }
+                if (valConfig.gridlines !== undefined) {
+                    valAxis.majorGridlines.visible = valConfig.gridlines;
+                }
+                if (valConfig.minimum !== undefined) {
+                    valAxis.minimum = valConfig.minimum;
+                }
+                if (valConfig.maximum !== undefined) {
+                    valAxis.maximum = valConfig.maximum;
+                }
+                if (valConfig.format && valConfig.format.font) {
+                    const font = valConfig.format.font;
+                    if (font.bold !== undefined) valAxis.format.font.bold = font.bold;
+                    if (font.color) valAxis.format.font.color = font.color;
+                    if (font.size) valAxis.format.font.size = font.size;
+                }
+                
+                console.log(`Applied value axis formatting: title="${valConfig.title || 'none'}", displayUnit="${valConfig.displayUnit || 'none'}"`);
+            }
+        } catch (e) {
+            console.log(`Warning: Axis formatting error: ${e.message}`);
+        }
+    }
+    
+    // ========== Chart Element Formatting ==========
+    if (advancedOptions.formatting) {
+        try {
+            // Title formatting
+            if (advancedOptions.formatting.title && advancedOptions.formatting.title.font) {
+                const font = advancedOptions.formatting.title.font;
+                if (font.bold !== undefined) chart.title.format.font.bold = font.bold;
+                if (font.color) chart.title.format.font.color = font.color;
+                if (font.size) chart.title.format.font.size = font.size;
+                if (font.italic !== undefined) chart.title.format.font.italic = font.italic;
+                
+                console.log(`Applied title formatting: bold=${font.bold}, color=${font.color}, size=${font.size}`);
+            }
+            
+            // Legend formatting
+            if (advancedOptions.formatting.legend) {
+                const legendConfig = advancedOptions.formatting.legend;
+                
+                const legendPositionMap = {
+                    "Top": Excel.ChartLegendPosition.top,
+                    "Bottom": Excel.ChartLegendPosition.bottom,
+                    "Left": Excel.ChartLegendPosition.left,
+                    "Right": Excel.ChartLegendPosition.right,
+                    "Corner": Excel.ChartLegendPosition.corner,
+                    "Custom": Excel.ChartLegendPosition.custom
+                };
+                
+                if (legendConfig.position && legendPositionMap[legendConfig.position]) {
+                    chart.legend.position = legendPositionMap[legendConfig.position];
+                }
+                if (legendConfig.font) {
+                    if (legendConfig.font.bold !== undefined) chart.legend.format.font.bold = legendConfig.font.bold;
+                    if (legendConfig.font.color) chart.legend.format.font.color = legendConfig.font.color;
+                    if (legendConfig.font.size) chart.legend.format.font.size = legendConfig.font.size;
+                }
+                
+                console.log(`Applied legend formatting: position=${legendConfig.position || 'default'}`);
+            }
+            
+            // Chart area formatting (fill and border)
+            if (advancedOptions.formatting.chartArea) {
+                if (advancedOptions.formatting.chartArea.fill) {
+                    chart.format.fill.setSolidColor(advancedOptions.formatting.chartArea.fill);
+                    console.log(`Applied chart area fill: ${advancedOptions.formatting.chartArea.fill}`);
+                }
+                
+                // Chart area border customization
+                if (advancedOptions.formatting.chartArea.border) {
+                    const borderConfig = advancedOptions.formatting.chartArea.border;
+                    const chartLine = chart.format.border;
+                    
+                    if (borderConfig.color) {
+                        chartLine.color = borderConfig.color;
+                    }
+                    if (borderConfig.weight !== undefined) {
+                        chartLine.weight = borderConfig.weight;
+                    }
+                    if (borderConfig.lineStyle) {
+                        const lineStyleMap = {
+                            "Continuous": Excel.ChartLineStyle.continuous,
+                            "Dash": Excel.ChartLineStyle.dash,
+                            "DashDot": Excel.ChartLineStyle.dashDot,
+                            "DashDotDot": Excel.ChartLineStyle.dashDotDot,
+                            "Dot": Excel.ChartLineStyle.dot,
+                            "Grey25": Excel.ChartLineStyle.grey25,
+                            "Grey50": Excel.ChartLineStyle.grey50,
+                            "Grey75": Excel.ChartLineStyle.grey75,
+                            "Automatic": Excel.ChartLineStyle.automatic,
+                            "None": Excel.ChartLineStyle.none
+                        };
+                        if (lineStyleMap[borderConfig.lineStyle]) {
+                            chartLine.lineStyle = lineStyleMap[borderConfig.lineStyle];
+                        }
+                    }
+                    
+                    console.log(`Applied chart area border: color=${borderConfig.color || 'default'}, weight=${borderConfig.weight || 'default'}, style=${borderConfig.lineStyle || 'default'}`);
+                }
+            }
+            
+            // Plot area formatting (fill and border)
+            if (advancedOptions.formatting.plotArea) {
+                const plotArea = chart.plotArea;
+                
+                if (advancedOptions.formatting.plotArea.fill) {
+                    plotArea.format.fill.setSolidColor(advancedOptions.formatting.plotArea.fill);
+                    console.log(`Applied plot area fill: ${advancedOptions.formatting.plotArea.fill}`);
+                }
+                
+                if (advancedOptions.formatting.plotArea.border) {
+                    const borderConfig = advancedOptions.formatting.plotArea.border;
+                    const plotLine = plotArea.format.border;
+                    
+                    if (borderConfig.color) {
+                        plotLine.color = borderConfig.color;
+                    }
+                    if (borderConfig.weight !== undefined) {
+                        plotLine.weight = borderConfig.weight;
+                    }
+                    if (borderConfig.lineStyle) {
+                        const lineStyleMap = {
+                            "Continuous": Excel.ChartLineStyle.continuous,
+                            "Dash": Excel.ChartLineStyle.dash,
+                            "DashDot": Excel.ChartLineStyle.dashDot,
+                            "DashDotDot": Excel.ChartLineStyle.dashDotDot,
+                            "Dot": Excel.ChartLineStyle.dot,
+                            "None": Excel.ChartLineStyle.none
+                        };
+                        if (lineStyleMap[borderConfig.lineStyle]) {
+                            plotLine.lineStyle = lineStyleMap[borderConfig.lineStyle];
+                        }
+                    }
+                    
+                    console.log(`Applied plot area border: color=${borderConfig.color || 'default'}, weight=${borderConfig.weight || 'default'}`);
+                }
+            }
+        } catch (e) {
+            console.log(`Warning: Chart element formatting error: ${e.message}`);
+        }
+    }
+    
+    // ========== Combo Chart / Secondary Axis Support ==========
+    // Note: Series already loaded above if needsSeriesLoad was true
+    if (advancedOptions.comboSeries && Array.isArray(advancedOptions.comboSeries) && advancedOptions.comboSeries.length > 0) {
+        try {
+            const comboChartTypeMap = {
+                "Line": Excel.ChartType.line,
+                "ColumnClustered": Excel.ChartType.columnClustered,
+                "ColumnStacked": Excel.ChartType.columnStacked,
+                "Area": Excel.ChartType.area,
+                "AreaStacked": Excel.ChartType.areaStacked,
+                "Scatter": Excel.ChartType.xyscatter
+            };
+            
+            const axisGroupMap = {
+                "Primary": Excel.ChartAxisGroup.primary,
+                "Secondary": Excel.ChartAxisGroup.secondary
+            };
+            
+            for (const comboConfig of advancedOptions.comboSeries) {
+                const seriesIndex = comboConfig.seriesIndex;
+                
+                if (seriesIndex >= 0 && seriesIndex < chart.series.items.length) {
+                    const series = chart.series.items[seriesIndex];
+                    
+                    if (comboConfig.chartType && comboChartTypeMap[comboConfig.chartType]) {
+                        series.chartType = comboChartTypeMap[comboConfig.chartType];
+                    }
+                    if (comboConfig.axisGroup && axisGroupMap[comboConfig.axisGroup]) {
+                        series.axisGroup = axisGroupMap[comboConfig.axisGroup];
+                    }
+                    
+                    console.log(`Set series ${seriesIndex} to ${comboConfig.chartType || 'default'} on ${comboConfig.axisGroup || 'Primary'} axis`);
+                } else {
+                    console.log(`Warning: Invalid seriesIndex ${seriesIndex} for combo series, skipping`);
+                }
+            }
+            
+            // Configure secondary value axis if any series uses it
+            if (advancedOptions.axes && advancedOptions.axes.value2) {
+                try {
+                    const secValAxis = chart.axes.getItem(Excel.ChartAxisType.value, Excel.ChartAxisGroup.secondary);
+                    const val2Config = advancedOptions.axes.value2;
+                    
+                    if (val2Config.title) {
+                        secValAxis.title.text = val2Config.title;
+                        secValAxis.title.visible = true;
+                    }
+                    
+                    console.log(`Applied secondary value axis title: "${val2Config.title || 'none'}"`);
+                } catch (secAxisError) {
+                    console.log(`Warning: Secondary axis configuration error: ${secAxisError.message}`);
+                }
+            }
+        } catch (e) {
+            console.log(`Warning: Combo chart customization error: ${e.message}`);
+        }
+    }
+    
+    // Final sync to apply all chart customizations
+    await ctx.sync();
 }
 
 /**
@@ -4213,6 +4761,239 @@ async function textToColumns(ctx, sheet, action) {
         const errorMsg = `Failed to split text to columns for "${action.target}": ${e.message}`;
         logError(errorMsg);
         throw new Error(errorMsg);
+    }
+}
+
+// ============================================================================
+// Hyperlink Operations
+// ============================================================================
+
+// Cache for hyperlink API support check
+let hyperlinkSupportChecked = false;
+let hyperlinkSupported = false;
+
+/**
+ * Checks if the Range.hyperlink API is supported (ExcelApi 1.7+)
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @returns {Promise<boolean>} True if hyperlinks are supported
+ */
+async function isHyperlinkSupported(ctx) {
+    if (hyperlinkSupportChecked) {
+        return hyperlinkSupported;
+    }
+    
+    try {
+        // Check using Office.context.requirements if available
+        if (typeof Office !== 'undefined' && Office.context && Office.context.requirements) {
+            hyperlinkSupported = Office.context.requirements.isSetSupported('ExcelApi', '1.7');
+            hyperlinkSupportChecked = true;
+            return hyperlinkSupported;
+        }
+        
+        // Fallback: try a lightweight operation to test support
+        const testRange = ctx.workbook.worksheets.getActiveWorksheet().getRange("A1");
+        testRange.load("hyperlink");
+        await ctx.sync();
+        hyperlinkSupported = true;
+        hyperlinkSupportChecked = true;
+        return true;
+    } catch (e) {
+        hyperlinkSupported = false;
+        hyperlinkSupportChecked = true;
+        return false;
+    }
+}
+
+/**
+ * Adds a hyperlink to a cell or range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Range} range - Target range
+ * @param {string} data - JSON string with hyperlink options
+ * 
+ * Supported options:
+ * - url: Web URL (e.g., "https://example.com")
+ * - email: Email address (automatically prefixed with "mailto:")
+ * - documentReference: Internal link (e.g., "'Sheet2'!A1")
+ * - displayText: Text to display in cell (defaults to URL/email/reference)
+ * - tooltip: Hover tooltip text (screenTip)
+ * 
+ * Note: Only one of url, email, or documentReference should be provided.
+ * Requires ExcelApi 1.7+ (Excel 2016+, Excel Online, Excel 365)
+ */
+async function addHyperlink(ctx, range, data) {
+    console.log(`[addHyperlink] Starting hyperlink addition`);
+    
+    // Check API support
+    const supported = await isHyperlinkSupported(ctx);
+    if (!supported) {
+        throw new Error("Hyperlinks require ExcelApi 1.7+; your version does not support this feature.");
+    }
+    
+    let options = { url: null, email: null, documentReference: null, displayText: null, tooltip: "" };
+    if (data) {
+        try {
+            options = { ...options, ...JSON.parse(data) };
+        } catch (e) {
+            console.warn(`[addHyperlink] Warning: Failed to parse data: ${e.message}`);
+        }
+    }
+    
+    // Validate: must have exactly one of url, email, or documentReference
+    const linkTypes = [options.url, options.email, options.documentReference].filter(v => v);
+    if (linkTypes.length === 0) {
+        throw new Error("Invalid hyperlink data: must provide url, email, or documentReference");
+    }
+    if (linkTypes.length > 1) {
+        throw new Error("Invalid hyperlink data: provide only one of url, email, or documentReference");
+    }
+    
+    try {
+        let hyperlinkObj = { screenTip: options.tooltip || "" };
+        
+        if (options.url) {
+            // Validate URL format
+            if (!options.url.match(/^https?:\/\//i) && !options.url.startsWith("//")) {
+                options.url = "https://" + options.url;
+            }
+            hyperlinkObj.address = options.url;
+            hyperlinkObj.textToDisplay = options.displayText || options.url;
+            console.log(`[addHyperlink] Adding web URL: ${options.url}`);
+        } else if (options.email) {
+            // Automatically add mailto: prefix
+            const emailAddress = options.email.startsWith("mailto:") ? options.email : "mailto:" + options.email;
+            hyperlinkObj.address = emailAddress;
+            hyperlinkObj.textToDisplay = options.displayText || options.email;
+            console.log(`[addHyperlink] Adding email link: ${options.email}`);
+        } else if (options.documentReference) {
+            hyperlinkObj.documentReference = options.documentReference;
+            hyperlinkObj.textToDisplay = options.displayText || options.documentReference;
+            console.log(`[addHyperlink] Adding internal link: ${options.documentReference}`);
+        }
+        
+        range.hyperlink = hyperlinkObj;
+        await ctx.sync();
+        
+        logInfo(`Successfully added hyperlink`);
+    } catch (e) {
+        throw new Error(`Failed to add hyperlink: ${e.message}`);
+    }
+}
+
+/**
+ * Removes hyperlink(s) from a cell or range
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Range} range - Target range
+ * 
+ * Note: This clears only the hyperlink, preserving cell values and formatting.
+ * Always clears the entire range even if only some cells have hyperlinks.
+ * Requires ExcelApi 1.7+
+ */
+async function removeHyperlink(ctx, range) {
+    console.log(`[removeHyperlink] Starting hyperlink removal`);
+    
+    // Check API support
+    const supported = await isHyperlinkSupported(ctx);
+    if (!supported) {
+        throw new Error("Hyperlinks require ExcelApi 1.7+; your version does not support this feature.");
+    }
+    
+    try {
+        // Clear hyperlinks from entire range using clear method
+        // This works even if only some cells in the range have hyperlinks
+        range.clear(Excel.ClearApplyTo.hyperlinks);
+        await ctx.sync();
+        
+        logInfo(`Successfully removed hyperlinks from range`);
+    } catch (e) {
+        throw new Error(`Failed to remove hyperlink: ${e.message}`);
+    }
+}
+
+/**
+ * Edits an existing hyperlink or adds a new one if none exists
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Range} range - Target range
+ * @param {string} data - JSON string with hyperlink options to update
+ * 
+ * Supported options (all optional - only provided fields are updated):
+ * - url: New web URL
+ * - email: New email address
+ * - documentReference: New internal link
+ * - displayText: New display text
+ * - tooltip: New tooltip text
+ * 
+ * Note: If changing link type (e.g., url to documentReference), the old type is cleared.
+ * Requires ExcelApi 1.7+
+ */
+async function editHyperlink(ctx, range, data) {
+    console.log(`[editHyperlink] Starting hyperlink edit`);
+    
+    // Check API support
+    const supported = await isHyperlinkSupported(ctx);
+    if (!supported) {
+        throw new Error("Hyperlinks require ExcelApi 1.7+; your version does not support this feature.");
+    }
+    
+    let options = {};
+    if (data) {
+        try {
+            options = JSON.parse(data);
+        } catch (e) {
+            console.warn(`[editHyperlink] Warning: Failed to parse data: ${e.message}`);
+        }
+    }
+    
+    try {
+        // Load existing hyperlink
+        range.load("hyperlink");
+        await ctx.sync();
+        
+        const existingHyperlink = range.hyperlink || {};
+        let hyperlinkObj = {
+            screenTip: options.tooltip !== undefined ? options.tooltip : (existingHyperlink.screenTip || ""),
+            textToDisplay: options.displayText !== undefined ? options.displayText : existingHyperlink.textToDisplay
+        };
+        
+        // Determine link type - new value takes precedence
+        if (options.url) {
+            if (!options.url.match(/^https?:\/\//i) && !options.url.startsWith("//")) {
+                options.url = "https://" + options.url;
+            }
+            hyperlinkObj.address = options.url;
+            if (!options.displayText && !existingHyperlink.textToDisplay) {
+                hyperlinkObj.textToDisplay = options.url;
+            }
+            console.log(`[editHyperlink] Updating to web URL: ${options.url}`);
+        } else if (options.email) {
+            const emailAddress = options.email.startsWith("mailto:") ? options.email : "mailto:" + options.email;
+            hyperlinkObj.address = emailAddress;
+            if (!options.displayText && !existingHyperlink.textToDisplay) {
+                hyperlinkObj.textToDisplay = options.email;
+            }
+            console.log(`[editHyperlink] Updating to email link: ${options.email}`);
+        } else if (options.documentReference) {
+            hyperlinkObj.documentReference = options.documentReference;
+            if (!options.displayText && !existingHyperlink.textToDisplay) {
+                hyperlinkObj.textToDisplay = options.documentReference;
+            }
+            console.log(`[editHyperlink] Updating to internal link: ${options.documentReference}`);
+        } else {
+            // Keep existing link type
+            if (existingHyperlink.address) {
+                hyperlinkObj.address = existingHyperlink.address;
+            } else if (existingHyperlink.documentReference) {
+                hyperlinkObj.documentReference = existingHyperlink.documentReference;
+            } else {
+                throw new Error("No existing hyperlink to edit and no new link provided");
+            }
+        }
+        
+        range.hyperlink = hyperlinkObj;
+        await ctx.sync();
+        
+        logInfo(`Successfully edited hyperlink`);
+    } catch (e) {
+        throw new Error(`Failed to edit hyperlink: ${e.message}`);
     }
 }
 
@@ -5701,5 +6482,1915 @@ async function listNamedRanges(ctx, sheet, action) {
         const errorMsg = `Failed to list named ranges: ${e.message}`;
         logError(errorMsg);
         throw new Error(errorMsg);
+    }
+}
+
+// ============================================================================
+// Protection Operations
+// ============================================================================
+
+/**
+ * Protects a worksheet with optional password and permissions
+ */
+async function protectWorksheet(ctx, sheet, action) {
+    console.log(`[protectWorksheet] Protecting worksheet: ${action.target || sheet.name}`);
+    
+    try {
+        const data = action.data ? JSON.parse(action.data) : {};
+        const targetSheetName = action.target || sheet.name;
+        
+        // Get target sheet
+        const targetSheet = ctx.workbook.worksheets.getItemOrNullObject(targetSheetName);
+        await ctx.sync();
+        
+        if (targetSheet.isNullObject) {
+            throw new Error(`Sheet "${targetSheetName}" not found`);
+        }
+        
+        // Check if already protected
+        const protection = targetSheet.protection;
+        protection.load("protected");
+        await ctx.sync();
+        
+        if (protection.protected) {
+            throw new Error(`Sheet "${targetSheetName}" is already protected. Unprotect it first.`);
+        }
+        
+        // Build protection options
+        const options = {
+            allowAutoFilter: data.allowAutoFilter !== false,
+            allowDeleteColumns: data.allowDeleteColumns === true,
+            allowDeleteRows: data.allowDeleteRows === true,
+            allowFormatCells: data.allowFormatCells === true,
+            allowFormatColumns: data.allowFormatColumns === true,
+            allowFormatRows: data.allowFormatRows === true,
+            allowInsertColumns: data.allowInsertColumns === true,
+            allowInsertRows: data.allowInsertRows === true,
+            allowInsertHyperlinks: data.allowInsertHyperlinks === true,
+            allowPivotTables: data.allowPivotTables === true,
+            allowSort: data.allowSort === true,
+            selectionMode: data.selectionMode || "Normal"
+        };
+        
+        // Apply protection
+        const password = data.password || undefined;
+        protection.protect(options, password);
+        await ctx.sync();
+        
+        console.log(`[protectWorksheet] Successfully protected "${targetSheetName}"`);
+    } catch (error) {
+        console.log(`[protectWorksheet] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Unprotects a worksheet
+ */
+async function unprotectWorksheet(ctx, sheet, action) {
+    console.log(`[unprotectWorksheet] Unprotecting worksheet: ${action.target || sheet.name}`);
+    
+    try {
+        const data = action.data ? JSON.parse(action.data) : {};
+        const targetSheetName = action.target || sheet.name;
+        
+        // Get target sheet
+        const targetSheet = ctx.workbook.worksheets.getItemOrNullObject(targetSheetName);
+        await ctx.sync();
+        
+        if (targetSheet.isNullObject) {
+            throw new Error(`Sheet "${targetSheetName}" not found`);
+        }
+        
+        // Check if protected
+        const protection = targetSheet.protection;
+        protection.load("protected");
+        await ctx.sync();
+        
+        if (!protection.protected) {
+            console.log(`[unprotectWorksheet] Sheet "${targetSheetName}" is not protected, skipping`);
+            return;
+        }
+        
+        // Unprotect with password if provided
+        const password = data.password || undefined;
+        protection.unprotect(password);
+        await ctx.sync();
+        
+        console.log(`[unprotectWorksheet] Successfully unprotected "${targetSheetName}"`);
+    } catch (error) {
+        console.log(`[unprotectWorksheet] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Protects a range by locking cells (requires worksheet protection to take effect)
+ */
+async function protectRange(ctx, sheet, action) {
+    console.log(`[protectRange] Protecting range: ${action.target}`);
+    
+    try {
+        const data = action.data ? JSON.parse(action.data) : {};
+        const range = sheet.getRange(action.target);
+        
+        // Set protection properties
+        range.format.protection.locked = data.locked !== false;
+        range.format.protection.formulaHidden = data.formulaHidden === true;
+        await ctx.sync();
+        
+        console.log(`[protectRange] Successfully set protection for "${action.target}" (locked: ${data.locked !== false}, formulaHidden: ${data.formulaHidden === true})`);
+        console.log(`[protectRange] Note: Protection takes effect only when worksheet is protected`);
+    } catch (error) {
+        console.log(`[protectRange] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Unprotects a range by unlocking cells
+ */
+async function unprotectRange(ctx, sheet, action) {
+    console.log(`[unprotectRange] Unprotecting range: ${action.target}`);
+    
+    try {
+        const range = sheet.getRange(action.target);
+        
+        // Unlock cells and unhide formulas
+        range.format.protection.locked = false;
+        range.format.protection.formulaHidden = false;
+        await ctx.sync();
+        
+        console.log(`[unprotectRange] Successfully unlocked "${action.target}"`);
+    } catch (error) {
+        console.log(`[unprotectRange] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Protects workbook structure (prevents sheet add/delete/rename/move)
+ */
+async function protectWorkbook(ctx, sheet, action) {
+    console.log(`[protectWorkbook] Protecting workbook structure`);
+    
+    try {
+        const data = action.data ? JSON.parse(action.data) : {};
+        
+        // Check if already protected
+        const protection = ctx.workbook.protection;
+        protection.load("protected");
+        await ctx.sync();
+        
+        if (protection.protected) {
+            throw new Error("Workbook is already protected. Unprotect it first.");
+        }
+        
+        // Apply protection
+        const password = data.password || undefined;
+        protection.protect(password);
+        await ctx.sync();
+        
+        console.log(`[protectWorkbook] Successfully protected workbook structure`);
+    } catch (error) {
+        console.log(`[protectWorkbook] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Unprotects workbook structure
+ */
+async function unprotectWorkbook(ctx, sheet, action) {
+    console.log(`[unprotectWorkbook] Unprotecting workbook structure`);
+    
+    try {
+        const data = action.data ? JSON.parse(action.data) : {};
+        
+        // Check if protected
+        const protection = ctx.workbook.protection;
+        protection.load("protected");
+        await ctx.sync();
+        
+        if (!protection.protected) {
+            console.log(`[unprotectWorkbook] Workbook is not protected, skipping`);
+            return;
+        }
+        
+        // Unprotect with password if provided
+        const password = data.password || undefined;
+        protection.unprotect(password);
+        await ctx.sync();
+        
+        console.log(`[unprotectWorkbook] Successfully unprotected workbook structure`);
+    } catch (error) {
+        console.log(`[unprotectWorkbook] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// Shape and Image Operations
+// ============================================================================
+
+// Valid shape types for Office.js (all lowercase for validation)
+// Original casing is preserved in SHAPE_TYPE_MAP for Office.js API calls
+const VALID_SHAPE_TYPES = [
+    "rectangle", "oval", "triangle", "righttriangle", "parallelogram", "trapezoid",
+    "hexagon", "octagon", "pentagon", "plus", "star4", "star5", "star6",
+    "arrow", "chevron", "homeplate", "cube", "bevel", "foldedcorner",
+    "smileyface", "donut", "nosmoking", "blockarc", "heart", "lightningbolt",
+    "sun", "moon", "cloud", "arc", "bracepair", "bracketpair", "can",
+    "flowchartprocess", "flowchartdecision", "flowchartdata", "flowchartterminator",
+    "line", "lineinverse", "straightconnector1", "bentconnector2", "bentconnector3"
+];
+
+// Maps lowercase shape types to proper Office.js enum casing
+const SHAPE_TYPE_MAP = {
+    "rectangle": "Rectangle", "oval": "Oval", "triangle": "Triangle",
+    "righttriangle": "RightTriangle", "parallelogram": "Parallelogram", "trapezoid": "Trapezoid",
+    "hexagon": "Hexagon", "octagon": "Octagon", "pentagon": "Pentagon",
+    "plus": "Plus", "star4": "Star4", "star5": "Star5", "star6": "Star6",
+    "arrow": "Arrow", "chevron": "Chevron", "homeplate": "HomePlate",
+    "cube": "Cube", "bevel": "Bevel", "foldedcorner": "FoldedCorner",
+    "smileyface": "SmileyFace", "donut": "Donut", "nosmoking": "NoSmoking",
+    "blockarc": "BlockArc", "heart": "Heart", "lightningbolt": "LightningBolt",
+    "sun": "Sun", "moon": "Moon", "cloud": "Cloud", "arc": "Arc",
+    "bracepair": "BracePair", "bracketpair": "BracketPair", "can": "Can",
+    "flowchartprocess": "FlowchartProcess", "flowchartdecision": "FlowchartDecision",
+    "flowchartdata": "FlowchartData", "flowchartterminator": "FlowchartTerminator",
+    "line": "Line", "lineinverse": "LineInverse",
+    "straightconnector1": "StraightConnector1", "bentconnector2": "BentConnector2", "bentconnector3": "BentConnector3"
+};
+
+/**
+ * Inserts a geometric shape at a specified cell position
+ */
+async function insertShape(ctx, sheet, action) {
+    console.log(`[insertShape] Starting shape insertion at ${action.target}`);
+    
+    try {
+        const data = action.data ? JSON.parse(action.data) : {};
+        const shapeType = data.shapeType || "rectangle";
+        const normalizedType = shapeType.toLowerCase();
+        
+        // Validate shape type using normalized lowercase comparison
+        if (!VALID_SHAPE_TYPES.includes(normalizedType)) {
+            console.log(`[insertShape] Error: Invalid shape type "${shapeType}"`);
+            throw new Error(`Invalid shape type "${shapeType}". Valid types: rectangle, oval, triangle, rightTriangle, arrow, star5, hexagon, line, etc.`);
+        }
+        
+        // Get position from target cell
+        let left = 100, top = 100;
+        if (action.target) {
+            try {
+                const posRange = sheet.getRange(action.target);
+                posRange.load(["left", "top"]);
+                await ctx.sync();
+                left = posRange.left;
+                top = posRange.top;
+            } catch (posError) {
+                console.log(`[insertShape] Warning: Could not parse position "${action.target}", using default`);
+            }
+        }
+        
+        // Map normalized shape type to proper Office.js enum casing
+        const excelShapeType = SHAPE_TYPE_MAP[normalizedType] || (shapeType.charAt(0).toUpperCase() + shapeType.slice(1));
+        
+        // Create shape
+        const shape = sheet.shapes.addGeometricShape(excelShapeType);
+        
+        // Set position
+        shape.left = left;
+        shape.top = top;
+        
+        // Set dimensions
+        const width = data.width || 150;
+        const height = data.height || 100;
+        if (width <= 0 || height <= 0) {
+            throw new Error("Shape dimensions must be positive numbers");
+        }
+        shape.width = width;
+        shape.height = height;
+        
+        // Set rotation
+        if (data.rotation !== undefined) {
+            shape.rotation = data.rotation;
+        }
+        
+        // Apply fill color
+        if (data.fill && data.fill !== "none") {
+            shape.fill.setSolidColor(data.fill);
+        } else if (data.fill === "none") {
+            shape.fill.clear();
+        }
+        
+        // Apply line/border formatting
+        if (data.lineColor && data.lineColor !== "none") {
+            shape.lineFormat.color = data.lineColor;
+        }
+        if (data.lineWeight) {
+            shape.lineFormat.weight = data.lineWeight;
+        }
+        
+        // Add text if provided
+        if (data.text) {
+            shape.textFrame.textRange.text = data.text;
+        }
+        
+        // Set custom name if provided
+        if (data.name) {
+            shape.name = data.name;
+        }
+        
+        await ctx.sync();
+        
+        console.log(`[insertShape] Successfully created ${shapeType} shape at position (${left}, ${top})`);
+    } catch (error) {
+        console.log(`[insertShape] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Inserts an image from Base64-encoded data
+ */
+async function insertImage(ctx, sheet, action) {
+    console.log(`[insertImage] Starting image insertion at ${action.target}`);
+    
+    try {
+        const data = action.data ? JSON.parse(action.data) : {};
+        
+        // Validate source
+        if (!data.source) {
+            throw new Error("insertImage requires a Base64-encoded image string in data.source");
+        }
+        
+        // Extract Base64 data (handle data URI format)
+        let base64Data = data.source;
+        let isSvg = false;
+        
+        if (base64Data.startsWith("data:image/svg")) {
+            isSvg = true;
+            // For SVG, we need the XML content, not Base64
+            if (base64Data.includes(";base64,")) {
+                base64Data = atob(base64Data.split(";base64,")[1]);
+            }
+        } else if (base64Data.startsWith("data:image/")) {
+            // Extract just the Base64 part
+            base64Data = base64Data.split(",")[1] || base64Data;
+        }
+        
+        // Get position from target cell
+        let left = 100, top = 100;
+        if (action.target) {
+            try {
+                const posRange = sheet.getRange(action.target);
+                posRange.load(["left", "top"]);
+                await ctx.sync();
+                left = posRange.left;
+                top = posRange.top;
+            } catch (posError) {
+                console.log(`[insertImage] Warning: Could not parse position "${action.target}", using default`);
+            }
+        }
+        
+        // Insert image
+        let image;
+        if (isSvg) {
+            image = sheet.shapes.addSvg(base64Data);
+        } else {
+            image = sheet.shapes.addImage(base64Data);
+        }
+        
+        // Set position
+        image.left = left;
+        image.top = top;
+        
+        // Set dimensions
+        if (data.width) image.width = data.width;
+        if (data.height) image.height = data.height;
+        
+        // Lock aspect ratio by default
+        image.lockAspectRatio = data.lockAspectRatio !== false;
+        
+        // Set name and alt text
+        if (data.name) image.name = data.name;
+        if (data.altText) image.altTextDescription = data.altText;
+        
+        await ctx.sync();
+        
+        console.log(`[insertImage] Successfully inserted image at position (${left}, ${top})`);
+    } catch (error) {
+        console.log(`[insertImage] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Inserts a text box at a specified cell position
+ */
+async function insertTextBox(ctx, sheet, action) {
+    console.log(`[insertTextBox] Starting text box insertion at ${action.target}`);
+    
+    try {
+        const data = action.data ? JSON.parse(action.data) : {};
+        
+        // Validate text
+        if (!data.text) {
+            throw new Error("insertTextBox requires text content in data.text");
+        }
+        
+        // Get position from target cell
+        let left = 100, top = 100;
+        if (action.target) {
+            try {
+                const posRange = sheet.getRange(action.target);
+                posRange.load(["left", "top"]);
+                await ctx.sync();
+                left = posRange.left;
+                top = posRange.top;
+            } catch (posError) {
+                console.log(`[insertTextBox] Warning: Could not parse position "${action.target}", using default`);
+            }
+        }
+        
+        // Create text box (rectangle shape with text)
+        const textBox = sheet.shapes.addTextBox(data.text);
+        
+        // Set position
+        textBox.left = left;
+        textBox.top = top;
+        
+        // Set dimensions
+        textBox.width = data.width || 150;
+        textBox.height = data.height || 50;
+        
+        // Apply fill
+        if (data.fill && data.fill !== "none") {
+            textBox.fill.setSolidColor(data.fill);
+        } else if (data.fill === "none") {
+            textBox.fill.clear();
+        }
+        
+        // Apply border
+        if (data.lineColor === "none") {
+            textBox.lineFormat.visible = false;
+        } else if (data.lineColor) {
+            textBox.lineFormat.color = data.lineColor;
+        }
+        
+        // Set name
+        if (data.name) textBox.name = data.name;
+        
+        await ctx.sync();
+        
+        // Apply text formatting (requires separate sync)
+        if (data.fontSize || data.fontColor || data.horizontalAlignment || data.verticalAlignment) {
+            const textRange = textBox.textFrame.textRange;
+            if (data.fontSize) textRange.font.size = data.fontSize;
+            if (data.fontColor) textRange.font.color = data.fontColor;
+            if (data.horizontalAlignment) textBox.textFrame.horizontalAlignment = data.horizontalAlignment;
+            if (data.verticalAlignment) textBox.textFrame.verticalAlignment = data.verticalAlignment;
+            await ctx.sync();
+        }
+        
+        console.log(`[insertTextBox] Successfully created text box at position (${left}, ${top})`);
+    } catch (error) {
+        console.log(`[insertTextBox] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Formats an existing shape
+ */
+async function formatShape(ctx, sheet, target, data) {
+    console.log(`[formatShape] Formatting shape "${target}"`);
+    
+    if (!target) {
+        throw new Error("formatShape requires a shape name in target");
+    }
+    
+    try {
+        const options = data ? JSON.parse(data) : {};
+        
+        // Get shape
+        const shape = sheet.shapes.getItemOrNullObject(target);
+        shape.load("isNullObject");
+        await ctx.sync();
+        
+        if (shape.isNullObject) {
+            throw new Error(`Shape "${target}" not found`);
+        }
+        
+        // Apply fill
+        if (options.fill !== undefined) {
+            if (options.fill === "none") {
+                shape.fill.clear();
+            } else {
+                shape.fill.setSolidColor(options.fill);
+            }
+        }
+        
+        // Apply transparency (clamped to 0-1 range)
+        if (options.transparency !== undefined) {
+            shape.fill.transparency = Math.max(0, Math.min(1, options.transparency));
+        }
+        
+        // Apply line format
+        if (options.lineColor !== undefined) {
+            if (options.lineColor === "none") {
+                shape.lineFormat.visible = false;
+            } else {
+                shape.lineFormat.visible = true;
+                shape.lineFormat.color = options.lineColor;
+            }
+        }
+        if (options.lineWeight !== undefined) {
+            shape.lineFormat.weight = options.lineWeight;
+        }
+        if (options.lineStyle !== undefined) {
+            shape.lineFormat.dashStyle = options.lineStyle;
+        }
+        
+        // Apply dimensions
+        if (options.width !== undefined) shape.width = options.width;
+        if (options.height !== undefined) shape.height = options.height;
+        if (options.rotation !== undefined) shape.rotation = options.rotation;
+        
+        await ctx.sync();
+        
+        console.log(`[formatShape] Successfully formatted shape "${target}"`);
+    } catch (error) {
+        console.log(`[formatShape] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Deletes a shape by name
+ */
+async function deleteShape(ctx, sheet, target) {
+    console.log(`[deleteShape] Deleting shape "${target}"`);
+    
+    if (!target) {
+        throw new Error("deleteShape requires a shape name in target");
+    }
+    
+    try {
+        const shape = sheet.shapes.getItemOrNullObject(target);
+        shape.load(["isNullObject", "name"]);
+        await ctx.sync();
+        
+        if (shape.isNullObject) {
+            throw new Error(`Shape "${target}" not found`);
+        }
+        
+        shape.delete();
+        await ctx.sync();
+        
+        console.log(`[deleteShape] Successfully deleted shape "${target}"`);
+    } catch (error) {
+        console.log(`[deleteShape] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Groups multiple shapes together
+ */
+async function groupShapes(ctx, sheet, action) {
+    console.log(`[groupShapes] Grouping shapes: ${action.target}`);
+    
+    if (!action.target) {
+        throw new Error("groupShapes requires shape names in target (comma-separated)");
+    }
+    
+    try {
+        const data = action.data ? JSON.parse(action.data) : {};
+        
+        // Parse shape names
+        const shapeNames = action.target.split(",").map(s => s.trim()).filter(s => s);
+        
+        if (shapeNames.length < 2) {
+            throw new Error("groupShapes requires at least 2 shapes to group");
+        }
+        
+        // Get all shapes and collect their IDs
+        const shapes = [];
+        for (const name of shapeNames) {
+            const shape = sheet.shapes.getItemOrNullObject(name);
+            shape.load(["isNullObject", "id"]);
+            shapes.push({ name, shape });
+        }
+        await ctx.sync();
+        
+        // Validate all shapes exist
+        const shapeIds = [];
+        for (const { name, shape } of shapes) {
+            if (shape.isNullObject) {
+                throw new Error(`Shape "${name}" not found`);
+            }
+            shapeIds.push(shape.id);
+        }
+        
+        // Create group
+        const group = sheet.shapes.addGroup(shapeIds);
+        
+        // Set group name if provided
+        if (data.groupName) {
+            group.name = data.groupName;
+        }
+        
+        await ctx.sync();
+        
+        console.log(`[groupShapes] Successfully grouped ${shapeNames.length} shapes`);
+    } catch (error) {
+        console.log(`[groupShapes] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Arranges shape z-order (layering)
+ */
+async function arrangeShapes(ctx, sheet, target, data) {
+    console.log(`[arrangeShapes] Arranging shape "${target}"`);
+    
+    if (!target) {
+        throw new Error("arrangeShapes requires a shape name in target");
+    }
+    
+    try {
+        const options = data ? JSON.parse(data) : {};
+        
+        if (!options.order) {
+            throw new Error("arrangeShapes requires an order option: bringToFront, sendToBack, bringForward, sendBackward");
+        }
+        
+        // Get shape
+        const shape = sheet.shapes.getItemOrNullObject(target);
+        shape.load("isNullObject");
+        await ctx.sync();
+        
+        if (shape.isNullObject) {
+            throw new Error(`Shape "${target}" not found`);
+        }
+        
+        // Map order to Excel enum
+        const orderMap = {
+            "bringToFront": "BringToFront",
+            "sendToBack": "SendToBack",
+            "bringForward": "BringForward",
+            "sendBackward": "SendBackward"
+        };
+        
+        const excelOrder = orderMap[options.order];
+        if (!excelOrder) {
+            throw new Error(`Invalid order "${options.order}". Valid options: bringToFront, sendToBack, bringForward, sendBackward`);
+        }
+        
+        shape.incrementZOrder(excelOrder);
+        await ctx.sync();
+        
+        console.log(`[arrangeShapes] Successfully applied ${options.order} to shape "${target}"`);
+    } catch (error) {
+        console.log(`[arrangeShapes] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Ungroups a shape group back into individual shapes
+ */
+async function ungroupShapes(ctx, sheet, target) {
+    console.log(`[ungroupShapes] Ungrouping shape group "${target}"`);
+    
+    if (!target) {
+        throw new Error("ungroupShapes requires a group name in target");
+    }
+    
+    try {
+        // Get the shape group
+        const shape = sheet.shapes.getItemOrNullObject(target);
+        shape.load(["isNullObject", "type"]);
+        await ctx.sync();
+        
+        if (shape.isNullObject) {
+            throw new Error(`Shape "${target}" not found`);
+        }
+        
+        // Verify it's a group
+        if (shape.type !== "Group") {
+            throw new Error(`Shape "${target}" is not a group. Only grouped shapes can be ungrouped.`);
+        }
+        
+        // Get the group and ungroup it
+        const group = shape.group;
+        group.ungroup();
+        await ctx.sync();
+        
+        console.log(`[ungroupShapes] Successfully ungrouped "${target}"`);
+    } catch (error) {
+        console.log(`[ungroupShapes] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// Comments and Notes Operations
+// ============================================================================
+
+/**
+ * Adds a threaded comment to a cell
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @param {Object} action - Action object with target and data
+ */
+async function addComment(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[addComment] Adding comment to cell "${target}"`);
+    
+    if (!target) {
+        throw new Error("addComment requires a cell address in target");
+    }
+    
+    try {
+        // Check if comments API is available
+        if (!sheet.comments) {
+            throw new Error("Comments API is not available in this Excel version");
+        }
+        
+        // Check worksheet protection
+        sheet.protection.load("protected");
+        await ctx.sync();
+        
+        if (sheet.protection.protected) {
+            logWarn(`[addComment] Warning: Sheet is protected, comment may not be added`);
+        }
+        
+        const options = data ? JSON.parse(data) : {};
+        const content = options.content || options.text || "";
+        const contentType = options.contentType === "Mention" ? Excel.ContentType.mention : Excel.ContentType.plain;
+        
+        if (!content) {
+            throw new Error("addComment requires content in data");
+        }
+        
+        // Add comment to the cell
+        const comment = sheet.comments.add(target, content, contentType);
+        comment.load(["id", "authorName", "creationDate"]);
+        await ctx.sync();
+        
+        logInfo(`[addComment] Successfully added comment (ID: ${comment.id}) to "${target}" by ${comment.authorName}`);
+    } catch (error) {
+        logError(`[addComment] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Adds a legacy note to a cell
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @param {Object} action - Action object with target and data
+ */
+async function addNote(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[addNote] Adding note to cell "${target}"`);
+    
+    if (!target) {
+        throw new Error("addNote requires a cell address in target");
+    }
+    
+    try {
+        // Check worksheet protection
+        sheet.protection.load("protected");
+        await ctx.sync();
+        
+        if (sheet.protection.protected) {
+            logWarn(`[addNote] Warning: Sheet is protected, note may not be added`);
+        }
+        
+        const options = data ? JSON.parse(data) : {};
+        const text = options.text || options.content || "";
+        
+        if (!text) {
+            throw new Error("addNote requires text in data");
+        }
+        
+        // Get the range and check if note API is available
+        const range = sheet.getRange(target);
+        
+        // Check if note property exists
+        if (range.note === undefined) {
+            throw new Error("Notes API is not available in this Excel version");
+        }
+        
+        range.note = text;
+        await ctx.sync();
+        
+        logInfo(`[addNote] Successfully added note to "${target}"`);
+    } catch (error) {
+        logError(`[addNote] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Edits an existing comment on a cell
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @param {Object} action - Action object with target and data
+ */
+async function editComment(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[editComment] Editing comment at cell "${target}"`);
+    
+    if (!target) {
+        throw new Error("editComment requires a cell address in target");
+    }
+    
+    try {
+        // Check if comments API is available
+        if (!sheet.comments) {
+            throw new Error("Comments API is not available in this Excel version");
+        }
+        
+        // Check worksheet protection
+        sheet.protection.load("protected");
+        await ctx.sync();
+        
+        if (sheet.protection.protected) {
+            throw new Error("Cannot modify comments on a protected sheet");
+        }
+        
+        const options = data ? JSON.parse(data) : {};
+        const content = options.content || options.text || "";
+        
+        if (!content) {
+            throw new Error("editComment requires content in data");
+        }
+        
+        // Get comment by cell address
+        const comment = sheet.comments.getItemByCell(target);
+        comment.load("isNullObject");
+        await ctx.sync();
+        
+        if (comment.isNullObject) {
+            throw new Error(`No comment found at cell "${target}"`);
+        }
+        
+        // Update the comment content
+        comment.content = content;
+        await ctx.sync();
+        
+        logInfo(`[editComment] Successfully edited comment at "${target}"`);
+    } catch (error) {
+        logError(`[editComment] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Edits an existing note on a cell
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @param {Object} action - Action object with target and data
+ */
+async function editNote(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[editNote] Editing note at cell "${target}"`);
+    
+    if (!target) {
+        throw new Error("editNote requires a cell address in target");
+    }
+    
+    try {
+        // Check worksheet protection
+        sheet.protection.load("protected");
+        await ctx.sync();
+        
+        if (sheet.protection.protected) {
+            throw new Error("Cannot modify notes on a protected sheet");
+        }
+        
+        const options = data ? JSON.parse(data) : {};
+        const text = options.text || options.content || "";
+        
+        if (!text) {
+            throw new Error("editNote requires text in data");
+        }
+        
+        // Get the range and update the note
+        const range = sheet.getRange(target);
+        
+        // Check if note property exists
+        if (range.note === undefined) {
+            throw new Error("Notes API is not available in this Excel version");
+        }
+        
+        range.note = text;
+        await ctx.sync();
+        
+        logInfo(`[editNote] Successfully edited note at "${target}"`);
+    } catch (error) {
+        logError(`[editNote] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Deletes a comment from a cell
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @param {Object} action - Action object with target
+ */
+async function deleteComment(ctx, sheet, action) {
+    const { target } = action;
+    logDebug(`[deleteComment] Deleting comment at cell "${target}"`);
+    
+    if (!target) {
+        throw new Error("deleteComment requires a cell address in target");
+    }
+    
+    try {
+        // Check if comments API is available
+        if (!sheet.comments) {
+            throw new Error("Comments API is not available in this Excel version");
+        }
+        
+        // Check worksheet protection
+        sheet.protection.load("protected");
+        await ctx.sync();
+        
+        if (sheet.protection.protected) {
+            throw new Error("Cannot delete comments on a protected sheet");
+        }
+        
+        // Get comment by cell address using getItemByCell
+        const comment = sheet.comments.getItemByCell(target);
+        comment.load("isNullObject");
+        await ctx.sync();
+        
+        if (comment.isNullObject) {
+            logDebug(`[deleteComment] No comment found at "${target}" - nothing to delete`);
+            return;
+        }
+        
+        // Delete the comment
+        comment.delete();
+        await ctx.sync();
+        
+        logInfo(`[deleteComment] Successfully deleted comment at "${target}"`);
+    } catch (error) {
+        logError(`[deleteComment] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Deletes a note from a cell
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @param {Object} action - Action object with target
+ */
+async function deleteNote(ctx, sheet, action) {
+    const { target } = action;
+    logDebug(`[deleteNote] Deleting note at cell "${target}"`);
+    
+    if (!target) {
+        throw new Error("deleteNote requires a cell address in target");
+    }
+    
+    try {
+        // Check worksheet protection
+        sheet.protection.load("protected");
+        await ctx.sync();
+        
+        if (sheet.protection.protected) {
+            throw new Error("Cannot delete notes on a protected sheet");
+        }
+        
+        // Get the range and clear the note
+        const range = sheet.getRange(target);
+        
+        // Check if note property exists
+        if (range.note === undefined) {
+            throw new Error("Notes API is not available in this Excel version");
+        }
+        
+        range.note = "";
+        await ctx.sync();
+        
+        logInfo(`[deleteNote] Successfully deleted note at "${target}"`);
+    } catch (error) {
+        logError(`[deleteNote] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Adds a reply to an existing comment thread
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @param {Object} action - Action object with target and data
+ */
+async function replyToComment(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[replyToComment] Adding reply to comment at cell "${target}"`);
+    
+    if (!target) {
+        throw new Error("replyToComment requires a cell address in target");
+    }
+    
+    try {
+        // Check if comments API is available
+        if (!sheet.comments) {
+            throw new Error("Comments API is not available in this Excel version");
+        }
+        
+        // Check worksheet protection
+        sheet.protection.load("protected");
+        await ctx.sync();
+        
+        if (sheet.protection.protected) {
+            throw new Error("Cannot reply to comments on a protected sheet");
+        }
+        
+        const options = data ? JSON.parse(data) : {};
+        const content = options.content || options.text || "";
+        const contentType = options.contentType === "Mention" ? Excel.ContentType.mention : Excel.ContentType.plain;
+        
+        if (!content) {
+            throw new Error("replyToComment requires content in data");
+        }
+        
+        // Get the parent comment by cell address
+        const comment = sheet.comments.getItemByCell(target);
+        comment.load("isNullObject");
+        await ctx.sync();
+        
+        if (comment.isNullObject) {
+            throw new Error(`No comment found at cell "${target}" to reply to`);
+        }
+        
+        // Add reply to the comment
+        const reply = comment.replies.add(content, contentType);
+        reply.load(["id", "authorName", "creationDate"]);
+        await ctx.sync();
+        
+        logInfo(`[replyToComment] Successfully added reply (ID: ${reply.id}) to comment at "${target}"`);
+    } catch (error) {
+        logError(`[replyToComment] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Resolves or reopens a comment thread
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @param {Object} action - Action object with target and data
+ */
+async function resolveComment(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[resolveComment] Resolving/reopening comment at cell "${target}"`);
+    
+    if (!target) {
+        throw new Error("resolveComment requires a cell address in target");
+    }
+    
+    try {
+        // Check if comments API is available
+        if (!sheet.comments) {
+            throw new Error("Comments API is not available in this Excel version");
+        }
+        
+        // Check worksheet protection
+        sheet.protection.load("protected");
+        await ctx.sync();
+        
+        if (sheet.protection.protected) {
+            throw new Error("Cannot modify comments on a protected sheet");
+        }
+        
+        const options = data ? JSON.parse(data) : {};
+        const resolved = options.resolved !== false; // Default to true
+        
+        // Get comment by cell address
+        const comment = sheet.comments.getItemByCell(target);
+        comment.load("isNullObject");
+        await ctx.sync();
+        
+        if (comment.isNullObject) {
+            throw new Error(`No comment found at cell "${target}"`);
+        }
+        
+        // Set resolution status
+        comment.resolved = resolved;
+        await ctx.sync();
+        
+        logInfo(`[resolveComment] Successfully ${resolved ? "resolved" : "reopened"} comment at "${target}"`);
+    } catch (error) {
+        logError(`[resolveComment] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// Sparkline Operations
+// ============================================================================
+
+/**
+ * Checks if sparkline API is supported in the current Excel version
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @returns {Promise<boolean>} True if sparklines are supported
+ */
+async function isSparklineSupported(ctx, sheet) {
+    try {
+        if (!sheet.sparklineGroups) {
+            return false;
+        }
+        sheet.sparklineGroups.load("count");
+        await ctx.sync();
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
+/**
+ * Creates sparkline(s) at the specified location
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @param {Object} action - Action object with target and data
+ */
+async function createSparkline(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[createSparkline] Creating sparkline at "${target}"`);
+    
+    if (!target) {
+        throw new Error("createSparkline requires a cell address in target");
+    }
+    
+    try {
+        const supported = await isSparklineSupported(ctx, sheet);
+        if (!supported) {
+            logWarn(`[createSparkline] Sparklines require ExcelApi 1.10+. Consider using data bars.`);
+            throw new Error("Sparklines are not available in this Excel version (requires ExcelApi 1.10+). Consider using data bars as an alternative.");
+        }
+        
+        sheet.protection.load("protected");
+        await ctx.sync();
+        
+        if (sheet.protection.protected) {
+            logWarn(`[createSparkline] Warning: Sheet is protected`);
+        }
+        
+        let options = {};
+        if (data) {
+            if (typeof data === "string") {
+                try {
+                    options = JSON.parse(data);
+                } catch (e) {
+                    logWarn(`[createSparkline] Warning: Could not parse data JSON`);
+                }
+            } else if (typeof data === "object") {
+                options = data;
+            }
+        }
+        
+        const sparklineType = options.type || "Line";
+        const sourceData = options.sourceData;
+        
+        if (!sourceData) {
+            throw new Error("createSparkline requires sourceData in data (e.g., 'B2:F2')");
+        }
+        
+        const typeMap = {
+            "Line": Excel.SparklineType.line,
+            "Column": Excel.SparklineType.column,
+            "WinLoss": Excel.SparklineType.winLoss
+        };
+        
+        const excelType = typeMap[sparklineType];
+        if (!excelType) {
+            throw new Error(`Invalid sparkline type "${sparklineType}". Valid types: Line, Column, WinLoss`);
+        }
+        
+        const rangePattern = /^[A-Z]+\d+(:[A-Z]+\d+)?$/i;
+        if (!rangePattern.test(sourceData)) {
+            throw new Error(`Invalid sourceData range format "${sourceData}". Expected format: B2:F2 or C3:C20`);
+        }
+        
+        const sparklineGroup = sheet.sparklineGroups.add(excelType, sourceData, target);
+        
+        if (options.axes && options.axes.horizontal !== undefined) {
+            sparklineGroup.axes.horizontal.axis.visible = options.axes.horizontal;
+        }
+        
+        if (options.markers && sparklineType === "Line") {
+            const points = sparklineGroup.points;
+            if (options.markers.high !== undefined) points.highPoint.visible = options.markers.high;
+            if (options.markers.low !== undefined) points.lowPoint.visible = options.markers.low;
+            if (options.markers.first !== undefined) points.firstPoint.visible = options.markers.first;
+            if (options.markers.last !== undefined) points.lastPoint.visible = options.markers.last;
+            if (options.markers.negative !== undefined) points.negativePoints.visible = options.markers.negative;
+        }
+        
+        if (options.colors) {
+            const hexPattern = /^#[0-9A-Fa-f]{6}$/;
+            if (options.colors.series && hexPattern.test(options.colors.series)) {
+                sparklineGroup.seriesColor = options.colors.series;
+            }
+            if (options.colors.negative && hexPattern.test(options.colors.negative)) {
+                sparklineGroup.negativePointsColor = options.colors.negative;
+            }
+            if (options.colors.high && hexPattern.test(options.colors.high)) {
+                sparklineGroup.highPointColor = options.colors.high;
+            }
+            if (options.colors.low && hexPattern.test(options.colors.low)) {
+                sparklineGroup.lowPointColor = options.colors.low;
+            }
+        }
+        
+        await ctx.sync();
+        
+        logInfo(`[createSparkline] Successfully created ${sparklineType} sparkline at "${target}" from "${sourceData}"`);
+    } catch (error) {
+        logError(`[createSparkline] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Normalizes a cell address for comparison by uppercasing, removing $ signs,
+ * and extracting only the address part (ignoring sheet name if target has none)
+ * @param {string} address - Cell address to normalize
+ * @param {boolean} hasSheetInTarget - Whether the target has a sheet name
+ * @returns {string} Normalized address
+ */
+function normalizeSparklineAddress(address, hasSheetInTarget) {
+    if (!address) return "";
+    let normalized = address.toUpperCase().replace(/\$/g, "");
+    // If target has no sheet name, strip sheet name from address for comparison
+    if (!hasSheetInTarget && normalized.includes("!")) {
+        normalized = normalized.split("!")[1] || normalized;
+    }
+    return normalized;
+}
+
+/**
+ * Configures an existing sparkline's properties
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @param {Object} action - Action object with target and data
+ */
+async function configureSparkline(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[configureSparkline] Configuring sparkline at "${target}"`);
+    
+    if (!target) {
+        throw new Error("configureSparkline requires a cell address in target");
+    }
+    
+    try {
+        const supported = await isSparklineSupported(ctx, sheet);
+        if (!supported) {
+            throw new Error("Sparklines are not available in this Excel version (requires ExcelApi 1.10+)");
+        }
+        
+        let options = {};
+        if (data) {
+            if (typeof data === "string") {
+                try {
+                    options = JSON.parse(data);
+                } catch (e) {
+                    logWarn(`[configureSparkline] Warning: Could not parse data JSON`);
+                }
+            } else if (typeof data === "object") {
+                options = data;
+            }
+        }
+        
+        // Normalize target address for comparison
+        const hasSheetInTarget = target.includes("!");
+        const normalizedTarget = normalizeSparklineAddress(target, hasSheetInTarget);
+        
+        // Load sparkline groups and batch load all sparkline locations
+        sheet.sparklineGroups.load("items");
+        await ctx.sync();
+        
+        // Batch load all sparkline locations before iterating
+        for (const group of sheet.sparklineGroups.items) {
+            group.load("sparklines/items/location");
+        }
+        await ctx.sync();
+        
+        // Batch load all location addresses
+        for (const group of sheet.sparklineGroups.items) {
+            for (const sparkline of group.sparklines.items) {
+                sparkline.location.load("address");
+            }
+        }
+        await ctx.sync();
+        
+        // Find sparkline group at the target location using strict equality
+        let foundSparkline = null;
+        for (const group of sheet.sparklineGroups.items) {
+            for (const sparkline of group.sparklines.items) {
+                const normalizedAddress = normalizeSparklineAddress(sparkline.location.address, hasSheetInTarget);
+                if (normalizedAddress === normalizedTarget) {
+                    foundSparkline = group;
+                    break;
+                }
+            }
+            if (foundSparkline) break;
+        }
+        
+        if (!foundSparkline) {
+            logWarn(`[configureSparkline] No sparkline found at "${target}"`);
+            throw new Error(`No sparkline found at cell "${target}"`);
+        }
+        
+        const hexPattern = /^#[0-9A-Fa-f]{6}$/;
+        
+        if (options.colors) {
+            if (options.colors.series && hexPattern.test(options.colors.series)) {
+                foundSparkline.seriesColor = options.colors.series;
+            }
+            if (options.colors.negative && hexPattern.test(options.colors.negative)) {
+                foundSparkline.negativePointsColor = options.colors.negative;
+            }
+            if (options.colors.high && hexPattern.test(options.colors.high)) {
+                foundSparkline.highPointColor = options.colors.high;
+            }
+            if (options.colors.low && hexPattern.test(options.colors.low)) {
+                foundSparkline.lowPointColor = options.colors.low;
+            }
+        }
+        
+        if (options.markers) {
+            const points = foundSparkline.points;
+            if (options.markers.high !== undefined) points.highPoint.visible = options.markers.high;
+            if (options.markers.low !== undefined) points.lowPoint.visible = options.markers.low;
+            if (options.markers.first !== undefined) points.firstPoint.visible = options.markers.first;
+            if (options.markers.last !== undefined) points.lastPoint.visible = options.markers.last;
+            if (options.markers.negative !== undefined) points.negativePoints.visible = options.markers.negative;
+        }
+        
+        if (options.axes && options.axes.horizontal !== undefined) {
+            foundSparkline.axes.horizontal.axis.visible = options.axes.horizontal;
+        }
+        
+        await ctx.sync();
+        
+        logInfo(`[configureSparkline] Successfully configured sparkline at "${target}"`);
+    } catch (error) {
+        logError(`[configureSparkline] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Deletes sparkline(s) at the specified location
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet object
+ * @param {Object} action - Action object with target
+ */
+async function deleteSparkline(ctx, sheet, action) {
+    const { target } = action;
+    logDebug(`[deleteSparkline] Deleting sparkline at "${target}"`);
+    
+    if (!target) {
+        throw new Error("deleteSparkline requires a cell address in target");
+    }
+    
+    try {
+        const supported = await isSparklineSupported(ctx, sheet);
+        if (!supported) {
+            throw new Error("Sparklines are not available in this Excel version (requires ExcelApi 1.10+)");
+        }
+        
+        // Normalize target address for comparison
+        const hasSheetInTarget = target.includes("!");
+        const normalizedTarget = normalizeSparklineAddress(target, hasSheetInTarget);
+        
+        // Load sparkline groups and batch load all sparkline locations
+        sheet.sparklineGroups.load("items");
+        await ctx.sync();
+        
+        // Batch load all sparkline locations before iterating
+        for (const group of sheet.sparklineGroups.items) {
+            group.load("sparklines/items/location");
+        }
+        await ctx.sync();
+        
+        // Batch load all location addresses
+        for (const group of sheet.sparklineGroups.items) {
+            for (const sparkline of group.sparklines.items) {
+                sparkline.location.load("address");
+            }
+        }
+        await ctx.sync();
+        
+        // Find sparkline groups at the target location using strict equality
+        let deletedCount = 0;
+        const groupsToDelete = [];
+        
+        for (const group of sheet.sparklineGroups.items) {
+            for (const sparkline of group.sparklines.items) {
+                const normalizedAddress = normalizeSparklineAddress(sparkline.location.address, hasSheetInTarget);
+                if (normalizedAddress === normalizedTarget) {
+                    groupsToDelete.push(group);
+                    break;
+                }
+            }
+        }
+        
+        for (const group of groupsToDelete) {
+            group.delete();
+            deletedCount++;
+        }
+        
+        await ctx.sync();
+        
+        if (deletedCount === 0) {
+            logWarn(`[deleteSparkline] No sparkline found at "${target}" - nothing to delete`);
+        } else {
+            logInfo(`[deleteSparkline] Successfully deleted ${deletedCount} sparkline group(s) at "${target}"`);
+        }
+    } catch (error) {
+        logError(`[deleteSparkline] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+// ============================================================================
+// Worksheet Management Operations
+// ============================================================================
+
+/**
+ * Renames a worksheet
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Current worksheet (may not be target)
+ * @param {Object} action - Action object with target (old name) and data (newName)
+ */
+async function renameSheet(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[renameSheet] Renaming sheet "${target}"`);
+    
+    if (!target) {
+        throw new Error("renameSheet requires a sheet name in target");
+    }
+    
+    try {
+        const options = data ? JSON.parse(data) : {};
+        const newName = options.newName;
+        
+        if (!newName) {
+            throw new Error("renameSheet requires newName in data");
+        }
+        
+        // Validate new name
+        if (newName.length > 31) {
+            throw new Error("Sheet name cannot exceed 31 characters");
+        }
+        
+        const invalidChars = /[\\\/\?\*\[\]]/;
+        if (invalidChars.test(newName)) {
+            throw new Error("Sheet name cannot contain \\ / ? * [ ] characters");
+        }
+        
+        if (newName.trim() === "") {
+            throw new Error("Sheet name cannot be empty");
+        }
+        
+        // Get the target sheet
+        const targetSheet = ctx.workbook.worksheets.getItemOrNullObject(target);
+        targetSheet.load("name");
+        await ctx.sync();
+        
+        if (targetSheet.isNullObject) {
+            throw new Error(`Sheet "${target}" not found`);
+        }
+        
+        // Check for duplicate name
+        const existingSheet = ctx.workbook.worksheets.getItemOrNullObject(newName);
+        existingSheet.load("name");
+        await ctx.sync();
+        
+        if (!existingSheet.isNullObject && existingSheet.name.toLowerCase() !== target.toLowerCase()) {
+            throw new Error(`A sheet named "${newName}" already exists`);
+        }
+        
+        // Rename the sheet
+        targetSheet.name = newName;
+        await ctx.sync();
+        
+        logInfo(`[renameSheet] Successfully renamed sheet "${target}" to "${newName}"`);
+    } catch (error) {
+        logError(`[renameSheet] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Moves a worksheet to a new position
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Current worksheet
+ * @param {Object} action - Action object with target and data (position, referenceSheet)
+ */
+async function moveSheet(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[moveSheet] Moving sheet "${target}"`);
+    
+    if (!target) {
+        throw new Error("moveSheet requires a sheet name in target");
+    }
+    
+    try {
+        const options = data ? JSON.parse(data) : {};
+        const position = options.position || "last";
+        const referenceSheet = options.referenceSheet;
+        
+        // Get the target sheet
+        const targetSheet = ctx.workbook.worksheets.getItemOrNullObject(target);
+        targetSheet.load("name");
+        await ctx.sync();
+        
+        if (targetSheet.isNullObject) {
+            throw new Error(`Sheet "${target}" not found`);
+        }
+        
+        // Get all sheets to determine positions
+        const sheets = ctx.workbook.worksheets;
+        sheets.load("items");
+        await ctx.sync();
+        
+        let newPosition;
+        
+        switch (position.toLowerCase()) {
+            case "first":
+                newPosition = 0;
+                break;
+            case "last":
+                newPosition = sheets.items.length - 1;
+                break;
+            case "before":
+            case "after":
+                if (!referenceSheet) {
+                    throw new Error(`moveSheet with position "${position}" requires referenceSheet`);
+                }
+                const refSheet = ctx.workbook.worksheets.getItemOrNullObject(referenceSheet);
+                refSheet.load("position");
+                await ctx.sync();
+                
+                if (refSheet.isNullObject) {
+                    throw new Error(`Reference sheet "${referenceSheet}" not found`);
+                }
+                
+                newPosition = position.toLowerCase() === "before" 
+                    ? refSheet.position 
+                    : refSheet.position + 1;
+                break;
+            default:
+                throw new Error(`Invalid position "${position}". Use: first, last, before, after`);
+        }
+        
+        // Move the sheet
+        targetSheet.position = newPosition;
+        await ctx.sync();
+        
+        logInfo(`[moveSheet] Successfully moved sheet "${target}" to position ${newPosition}`);
+    } catch (error) {
+        logError(`[moveSheet] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Hides a worksheet
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Current worksheet
+ * @param {Object} action - Action object with target (sheet name)
+ */
+async function hideSheet(ctx, sheet, action) {
+    const { target } = action;
+    logDebug(`[hideSheet] Hiding sheet "${target}"`);
+    
+    if (!target) {
+        throw new Error("hideSheet requires a sheet name in target");
+    }
+    
+    try {
+        // First, get the target sheet and check its current visibility
+        const targetSheet = ctx.workbook.worksheets.getItemOrNullObject(target);
+        targetSheet.load(["name", "visibility"]);
+        await ctx.sync();
+        
+        if (targetSheet.isNullObject) {
+            throw new Error(`Sheet "${target}" not found`);
+        }
+        
+        // If already hidden, return early without checking visible sheet count
+        if (targetSheet.visibility !== Excel.SheetVisibility.visible) {
+            logWarn(`[hideSheet] Sheet "${target}" is already hidden`);
+            return;
+        }
+        
+        // Only check visible sheet count if we're about to hide a visible sheet
+        const sheets = ctx.workbook.worksheets;
+        sheets.load("items/visibility");
+        await ctx.sync();
+        
+        const visibleSheets = sheets.items.filter(s => s.visibility === Excel.SheetVisibility.visible);
+        
+        if (visibleSheets.length <= 1) {
+            throw new Error("Cannot hide the only visible sheet");
+        }
+        
+        // Hide the sheet
+        targetSheet.visibility = Excel.SheetVisibility.hidden;
+        await ctx.sync();
+        
+        logInfo(`[hideSheet] Successfully hidden sheet "${target}"`);
+    } catch (error) {
+        logError(`[hideSheet] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Unhides a worksheet
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Current worksheet
+ * @param {Object} action - Action object with target (sheet name)
+ */
+async function unhideSheet(ctx, sheet, action) {
+    const { target } = action;
+    logDebug(`[unhideSheet] Unhiding sheet "${target}"`);
+    
+    if (!target) {
+        throw new Error("unhideSheet requires a sheet name in target");
+    }
+    
+    try {
+        // Get the target sheet
+        const targetSheet = ctx.workbook.worksheets.getItemOrNullObject(target);
+        targetSheet.load(["name", "visibility"]);
+        await ctx.sync();
+        
+        if (targetSheet.isNullObject) {
+            throw new Error(`Sheet "${target}" not found`);
+        }
+        
+        if (targetSheet.visibility === Excel.SheetVisibility.visible) {
+            logWarn(`[unhideSheet] Sheet "${target}" is already visible`);
+            return;
+        }
+        
+        // Unhide the sheet
+        targetSheet.visibility = Excel.SheetVisibility.visible;
+        await ctx.sync();
+        
+        logInfo(`[unhideSheet] Successfully unhidden sheet "${target}"`);
+    } catch (error) {
+        logError(`[unhideSheet] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Freezes panes at a specified cell
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet to freeze
+ * @param {Object} action - Action object with target (cell) and data (freezeType)
+ */
+async function freezePanes(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[freezePanes] Freezing panes at "${target}"`);
+    
+    if (!target) {
+        throw new Error("freezePanes requires a cell address in target");
+    }
+    
+    try {
+        const options = data ? JSON.parse(data) : {};
+        const freezeType = options.freezeType || "both";
+        
+        // Get the freeze range
+        const range = sheet.getRange(target);
+        range.load(["rowIndex", "columnIndex"]);
+        await ctx.sync();
+        
+        const rowCount = range.rowIndex;
+        const colCount = range.columnIndex;
+        
+        // Apply freeze based on type
+        switch (freezeType.toLowerCase()) {
+            case "rows":
+                if (rowCount > 0) {
+                    sheet.freezePanes.freezeRows(rowCount);
+                } else {
+                    throw new Error("Cannot freeze rows: target cell is in row 1");
+                }
+                break;
+            case "columns":
+                if (colCount > 0) {
+                    sheet.freezePanes.freezeColumns(colCount);
+                } else {
+                    throw new Error("Cannot freeze columns: target cell is in column A");
+                }
+                break;
+            case "both":
+            default:
+                sheet.freezePanes.freezeAt(range);
+                break;
+        }
+        
+        await ctx.sync();
+        
+        logInfo(`[freezePanes] Successfully froze panes at "${target}" (type: ${freezeType})`);
+    } catch (error) {
+        logError(`[freezePanes] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Unfreezes all panes on a worksheet
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Current worksheet
+ * @param {Object} action - Action object with target ("current" or sheet name)
+ */
+async function unfreezePane(ctx, sheet, action) {
+    const { target } = action;
+    logDebug(`[unfreezePane] Unfreezing panes on "${target}"`);
+    
+    try {
+        let targetSheet = sheet;
+        
+        if (target && target.toLowerCase() !== "current") {
+            targetSheet = ctx.workbook.worksheets.getItemOrNullObject(target);
+            targetSheet.load("name");
+            await ctx.sync();
+            
+            if (targetSheet.isNullObject) {
+                throw new Error(`Sheet "${target}" not found`);
+            }
+        }
+        
+        // Unfreeze all panes
+        targetSheet.freezePanes.unfreeze();
+        await ctx.sync();
+        
+        logInfo(`[unfreezePane] Successfully unfroze panes`);
+    } catch (error) {
+        logError(`[unfreezePane] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Sets the zoom level for a worksheet
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Current worksheet
+ * @param {Object} action - Action object with target and data (zoomLevel)
+ */
+async function setZoom(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[setZoom] Setting zoom on "${target}"`);
+    
+    try {
+        const options = data ? JSON.parse(data) : {};
+        const zoomLevel = options.zoomLevel;
+        
+        if (zoomLevel === undefined || zoomLevel === null) {
+            throw new Error("setZoom requires zoomLevel in data");
+        }
+        
+        const zoom = parseInt(zoomLevel);
+        if (isNaN(zoom) || zoom < 10 || zoom > 400) {
+            throw new Error("zoomLevel must be between 10 and 400");
+        }
+        
+        let targetSheet = sheet;
+        
+        if (target && target.toLowerCase() !== "current") {
+            targetSheet = ctx.workbook.worksheets.getItemOrNullObject(target);
+            targetSheet.load("name");
+            await ctx.sync();
+            
+            if (targetSheet.isNullObject) {
+                throw new Error(`Sheet "${target}" not found`);
+            }
+        }
+        
+        // Set zoom level via the worksheet's pageLayout (Office.js workaround)
+        try {
+            if (targetSheet.view) {
+                targetSheet.view.zoom = zoom;
+            } else {
+                targetSheet.pageLayout.zoom = { scale: zoom };
+            }
+            await ctx.sync();
+        } catch (zoomError) {
+            targetSheet.pageLayout.zoom = { scale: zoom };
+            await ctx.sync();
+        }
+        
+        logInfo(`[setZoom] Successfully set zoom to ${zoom}%`);
+    } catch (error) {
+        logError(`[setZoom] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Splits panes at a specified cell
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Worksheet to split
+ * @param {Object} action - Action object with target (cell) and data (horizontal, vertical)
+ */
+async function splitPane(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[splitPane] Splitting panes at "${target}"`);
+    
+    if (!target) {
+        throw new Error("splitPane requires a cell address in target");
+    }
+    
+    try {
+        const options = data ? JSON.parse(data) : {};
+        const horizontal = options.horizontal !== false;
+        const vertical = options.vertical !== false;
+        
+        // Get the split position
+        const range = sheet.getRange(target);
+        range.load(["rowIndex", "columnIndex"]);
+        await ctx.sync();
+        
+        // Note: Office.js has limited support for split panes
+        // Using freezeAt as a workaround which creates a similar effect
+        if (horizontal && vertical) {
+            sheet.freezePanes.freezeAt(range);
+        } else if (horizontal && !vertical) {
+            // Horizontal-only split: guard against row 1
+            if (range.rowIndex === 0) {
+                throw new Error("Cannot split horizontally at row 1; choose a cell below the first row");
+            }
+            sheet.freezePanes.freezeRows(range.rowIndex);
+        } else if (vertical && !horizontal) {
+            // Vertical-only split: guard against column A
+            if (range.columnIndex === 0) {
+                throw new Error("Cannot split vertically at column A; choose a cell to the right of the first column");
+            }
+            sheet.freezePanes.freezeColumns(range.columnIndex);
+        }
+        
+        await ctx.sync();
+        
+        logInfo(`[splitPane] Successfully split panes at "${target}" (H:${horizontal}, V:${vertical})`);
+        logDebug(`[splitPane] Note: Using freeze panes as Office.js split pane API is limited`);
+    } catch (error) {
+        logError(`[splitPane] Error: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Creates a custom view (limited API support)
+ * @param {Excel.RequestContext} ctx - Excel context
+ * @param {Excel.Worksheet} sheet - Current worksheet
+ * @param {Object} action - Action object with target (view name) and data (options)
+ */
+async function createView(ctx, sheet, action) {
+    const { target, data } = action;
+    logDebug(`[createView] Creating view "${target}"`);
+    
+    if (!target) {
+        throw new Error("createView requires a view name in target");
+    }
+    
+    try {
+        // Note: Office.js has very limited support for custom views
+        const options = data ? JSON.parse(data) : {};
+        
+        // Load current view state for documentation
+        sheet.load("name");
+        await ctx.sync();
+        
+        logInfo(`[createView] Custom view "${target}" requested for sheet "${sheet.name}"`);
+        logDebug(`[createView] Options: includeHidden=${options.includeHidden}, includePrint=${options.includePrint}, includeFilter=${options.includeFilter}`);
+        logWarn(`[createView] Note: Office.js has limited custom view API support. Use Excel UI: View > Custom Views > Add`);
+        
+        console.warn(`Custom view "${target}" creation requires manual Excel UI. Go to View > Custom Views > Add.`);
+    } catch (error) {
+        logError(`[createView] Error: ${error.message}`);
+        throw error;
     }
 }

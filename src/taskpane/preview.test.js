@@ -297,7 +297,7 @@ describe('Preview Panel - Property Based Tests', () => {
 
     // Unit tests for getActionSummary
     describe('getActionSummary', () => {
-        test('returns correct labels for all types', () => {
+        test('returns correct labels for basic types', () => {
             expect(getActionSummary({ type: 'formula' })).toBe('Formula');
             expect(getActionSummary({ type: 'values' })).toBe('Values');
             expect(getActionSummary({ type: 'format' })).toBe('Format');
@@ -307,8 +307,256 @@ describe('Preview Panel - Property Based Tests', () => {
             expect(getActionSummary({ type: 'autofill' })).toBe('Autofill');
         });
 
+        test('returns correct labels for table operations', () => {
+            expect(getActionSummary({ type: 'createTable' })).toBe('Create Table');
+            expect(getActionSummary({ type: 'styleTable' })).toBe('Style Table');
+            expect(getActionSummary({ type: 'addTableRow' })).toBe('Add Table Row');
+            expect(getActionSummary({ type: 'addTableColumn' })).toBe('Add Table Column');
+            expect(getActionSummary({ type: 'resizeTable' })).toBe('Resize Table');
+            expect(getActionSummary({ type: 'convertToRange' })).toBe('Convert to Range');
+            expect(getActionSummary({ type: 'toggleTableTotals' })).toBe('Toggle Totals');
+        });
+
+        test('returns correct labels for pivot operations', () => {
+            expect(getActionSummary({ type: 'createPivotTable' })).toBe('Create PivotTable');
+            expect(getActionSummary({ type: 'addPivotField' })).toBe('Add Pivot Field');
+            expect(getActionSummary({ type: 'configurePivotLayout' })).toBe('Configure Pivot');
+            expect(getActionSummary({ type: 'refreshPivotTable' })).toBe('Refresh PivotTable');
+            expect(getActionSummary({ type: 'deletePivotTable' })).toBe('Delete PivotTable');
+        });
+
+        test('returns correct labels for slicer operations', () => {
+            expect(getActionSummary({ type: 'createSlicer' })).toBe('Create Slicer');
+            expect(getActionSummary({ type: 'configureSlicer' })).toBe('Configure Slicer');
+            expect(getActionSummary({ type: 'connectSlicerToTable' })).toBe('Connect Slicer to Table');
+            expect(getActionSummary({ type: 'connectSlicerToPivot' })).toBe('Connect Slicer to Pivot');
+            expect(getActionSummary({ type: 'deleteSlicer' })).toBe('Delete Slicer');
+        });
+
+        test('returns correct labels for comment operations', () => {
+            expect(getActionSummary({ type: 'addComment' })).toBe('Add Comment');
+            expect(getActionSummary({ type: 'addNote' })).toBe('Add Note');
+            expect(getActionSummary({ type: 'editComment' })).toBe('Edit Comment');
+            expect(getActionSummary({ type: 'deleteComment' })).toBe('Delete Comment');
+            expect(getActionSummary({ type: 'replyToComment' })).toBe('Reply to Comment');
+            expect(getActionSummary({ type: 'resolveComment' })).toBe('Resolve Comment');
+        });
+
+        test('returns correct labels for protection operations', () => {
+            expect(getActionSummary({ type: 'protectWorksheet' })).toBe('Protect Sheet');
+            expect(getActionSummary({ type: 'unprotectWorksheet' })).toBe('Unprotect Sheet');
+            expect(getActionSummary({ type: 'protectRange' })).toBe('Protect Range');
+            expect(getActionSummary({ type: 'protectWorkbook' })).toBe('Protect Workbook');
+        });
+
+        test('returns correct labels for page setup operations', () => {
+            expect(getActionSummary({ type: 'setPageSetup' })).toBe('Page Setup');
+            expect(getActionSummary({ type: 'setPageMargins' })).toBe('Set Margins');
+            expect(getActionSummary({ type: 'setPageOrientation' })).toBe('Set Orientation');
+            expect(getActionSummary({ type: 'setPrintArea' })).toBe('Set Print Area');
+            expect(getActionSummary({ type: 'setHeaderFooter' })).toBe('Set Header/Footer');
+            expect(getActionSummary({ type: 'setPageBreaks' })).toBe('Set Page Breaks');
+        });
+
         test('returns type for unknown types', () => {
             expect(getActionSummary({ type: 'unknown' })).toBe('unknown');
+        });
+
+        test('returns correct labels for advanced formatting types', () => {
+            expect(getActionSummary({ type: 'conditionalFormat' })).toBe('Conditional Format');
+            expect(getActionSummary({ type: 'clearFormat' })).toBe('Clear Format');
+        });
+
+        test('returns correct labels for copy/filter/duplicates types', () => {
+            expect(getActionSummary({ type: 'copy' })).toBe('Copy');
+            expect(getActionSummary({ type: 'copyValues' })).toBe('Copy Values');
+            expect(getActionSummary({ type: 'filter' })).toBe('Filter');
+            expect(getActionSummary({ type: 'clearFilter' })).toBe('Clear Filter');
+            expect(getActionSummary({ type: 'removeDuplicates' })).toBe('Remove Duplicates');
+        });
+
+        test('returns correct labels for named range types', () => {
+            expect(getActionSummary({ type: 'createNamedRange' })).toBe('Create Named Range');
+            expect(getActionSummary({ type: 'deleteNamedRange' })).toBe('Delete Named Range');
+            expect(getActionSummary({ type: 'updateNamedRange' })).toBe('Update Named Range');
+            expect(getActionSummary({ type: 'listNamedRanges' })).toBe('List Named Ranges');
+        });
+
+        test('returns correct labels for shape types', () => {
+            expect(getActionSummary({ type: 'insertShape' })).toBe('Insert Shape');
+            expect(getActionSummary({ type: 'insertImage' })).toBe('Insert Image');
+            expect(getActionSummary({ type: 'insertTextBox' })).toBe('Insert Text Box');
+            expect(getActionSummary({ type: 'formatShape' })).toBe('Format Shape');
+            expect(getActionSummary({ type: 'deleteShape' })).toBe('Delete Shape');
+            expect(getActionSummary({ type: 'groupShapes' })).toBe('Group Shapes');
+            expect(getActionSummary({ type: 'arrangeShapes' })).toBe('Arrange Shapes');
+            expect(getActionSummary({ type: 'ungroupShapes' })).toBe('Ungroup Shapes');
+        });
+
+        test('returns correct labels for sparkline types', () => {
+            expect(getActionSummary({ type: 'createSparkline' })).toBe('Create Sparkline');
+            expect(getActionSummary({ type: 'configureSparkline' })).toBe('Configure Sparkline');
+            expect(getActionSummary({ type: 'deleteSparkline' })).toBe('Delete Sparkline');
+        });
+
+        test('returns correct labels for worksheet management types', () => {
+            expect(getActionSummary({ type: 'renameSheet' })).toBe('Rename Sheet');
+            expect(getActionSummary({ type: 'moveSheet' })).toBe('Move Sheet');
+            expect(getActionSummary({ type: 'hideSheet' })).toBe('Hide Sheet');
+            expect(getActionSummary({ type: 'unhideSheet' })).toBe('Unhide Sheet');
+            expect(getActionSummary({ type: 'freezePanes' })).toBe('Freeze Panes');
+            expect(getActionSummary({ type: 'unfreezePane' })).toBe('Unfreeze Panes');
+            expect(getActionSummary({ type: 'setZoom' })).toBe('Set Zoom');
+            expect(getActionSummary({ type: 'splitPane' })).toBe('Split Panes');
+            expect(getActionSummary({ type: 'createView' })).toBe('Create View');
+        });
+
+        test('returns correct labels for data manipulation types', () => {
+            expect(getActionSummary({ type: 'insertRows' })).toBe('Insert Rows');
+            expect(getActionSummary({ type: 'insertColumns' })).toBe('Insert Columns');
+            expect(getActionSummary({ type: 'deleteRows' })).toBe('Delete Rows');
+            expect(getActionSummary({ type: 'deleteColumns' })).toBe('Delete Columns');
+            expect(getActionSummary({ type: 'mergeCells' })).toBe('Merge Cells');
+            expect(getActionSummary({ type: 'unmergeCells' })).toBe('Unmerge Cells');
+            expect(getActionSummary({ type: 'findReplace' })).toBe('Find & Replace');
+            expect(getActionSummary({ type: 'textToColumns' })).toBe('Text to Columns');
+        });
+
+        test('returns correct labels for data type operations', () => {
+            expect(getActionSummary({ type: 'insertDataType' })).toBe('Insert Entity');
+            expect(getActionSummary({ type: 'refreshDataType' })).toBe('Refresh Entity');
+        });
+    });
+
+    /**
+     * **Property 8: All action types have distinct icons**
+     * **Validates: Complete icon coverage for 87 action types**
+     */
+    describe('Property 8: All action types have distinct icons', () => {
+        test('all 87 action types have unique icons', () => {
+            const icons = ACTION_TYPES.map(type => getActionIcon(type));
+            const uniqueIcons = new Set(icons);
+            // All icons should be unique
+            expect(uniqueIcons.size).toBe(ACTION_TYPES.length);
+        });
+
+        test('ACTION_TYPES contains expected count', () => {
+            expect(ACTION_TYPES.length).toBe(87);
+        });
+    });
+
+    /**
+     * **Property 9: All action types have summary labels**
+     * **Validates: Complete label coverage**
+     */
+    describe('Property 9: All action types have summary labels', () => {
+        test('all action types return non-empty labels', () => {
+            fc.assert(
+                fc.property(actionTypeArb, (type) => {
+                    const label = getActionSummary({ type });
+                    expect(label).toBeTruthy();
+                    expect(label.length).toBeGreaterThan(0);
+                }),
+                { numRuns: 100 }
+            );
+        });
+    });
+
+    /**
+     * **Property 10: Complex actions parse JSON correctly**
+     * **Validates: JSON parsing in getActionDetails**
+     */
+    describe('Property 10: Complex actions parse JSON correctly', () => {
+        test('table actions parse JSON data', () => {
+            const action = {
+                type: 'createTable',
+                target: 'A1:D10',
+                data: JSON.stringify({ tableName: 'SalesData', style: 'TableStyleMedium2', hasHeaders: true })
+            };
+            const details = getActionDetails(action);
+            expect(details).toContain('SalesData');
+            expect(details).toContain('TableStyleMedium2');
+        });
+
+        test('pivot actions parse JSON data', () => {
+            const action = {
+                type: 'addPivotField',
+                target: 'PivotTable1',
+                data: JSON.stringify({ field: 'Revenue', area: 'data', aggregation: 'Sum' })
+            };
+            const details = getActionDetails(action);
+            expect(details).toContain('Revenue');
+            expect(details).toContain('data');
+        });
+
+        test('comment actions parse JSON data', () => {
+            const action = {
+                type: 'addComment',
+                target: 'A1',
+                data: JSON.stringify({ author: 'John', content: 'This is a test comment' })
+            };
+            const details = getActionDetails(action);
+            expect(details).toContain('John');
+            expect(details).toContain('test comment');
+        });
+
+        test('page setup actions parse JSON data', () => {
+            const action = {
+                type: 'setPageMargins',
+                target: 'Sheet1',
+                data: JSON.stringify({ top: 1, bottom: 1, left: 0.75, right: 0.75 })
+            };
+            const details = getActionDetails(action);
+            expect(details).toContain('Top');
+            expect(details).toContain('Bottom');
+        });
+    });
+
+    /**
+     * **Property 11: Action details handle missing data gracefully**
+     * **Validates: Fallback behavior**
+     */
+    describe('Property 11: Action details handle missing data gracefully', () => {
+        test('actions with null data return fallback', () => {
+            fc.assert(
+                fc.property(actionTypeArb, (type) => {
+                    const action = { type, target: 'A1', data: null };
+                    const details = getActionDetails(action);
+                    expect(details).toBeTruthy();
+                }),
+                { numRuns: 100 }
+            );
+        });
+
+        test('actions with invalid JSON return fallback', () => {
+            const action = {
+                type: 'createTable',
+                target: 'A1:D10',
+                data: 'not valid json'
+            };
+            const details = getActionDetails(action);
+            // Falls back to descriptive message when JSON parsing fails
+            expect(details).toContain('A1:D10');
+        });
+    });
+
+    /**
+     * **Property 12: Preview rendering works for all action types**
+     * **Validates: renderPreviewItem produces valid HTML**
+     */
+    describe('Property 12: Preview rendering works for all action types', () => {
+        test('all action types render valid HTML', () => {
+            fc.assert(
+                fc.property(actionTypeArb, (type) => {
+                    const action = { type, target: 'A1', data: '{}' };
+                    const html = renderPreviewItem(action, 0, false, true, false);
+                    expect(html).toContain('preview-item');
+                    expect(html).toContain('preview-checkbox');
+                    expect(html).toContain('preview-icon');
+                    expect(html).toContain('preview-content');
+                }),
+                { numRuns: 100 }
+            );
         });
     });
 });

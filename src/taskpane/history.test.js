@@ -16,8 +16,46 @@ const {
     renderHistoryList
 } = require('./history');
 
+// All 87 action types supported by the history module
+const ALL_ACTION_TYPES = [
+    // Basic Operations
+    'formula', 'values', 'format', 'validation', 'sort', 'autofill',
+    // Advanced Formatting
+    'conditionalFormat', 'clearFormat',
+    // Charts
+    'chart', 'pivotChart',
+    // Copy/Filter/Duplicates
+    'copy', 'copyValues', 'filter', 'clearFilter', 'removeDuplicates',
+    // Sheet Management
+    'sheet',
+    // Table Operations
+    'createTable', 'styleTable', 'addTableRow', 'addTableColumn', 'resizeTable', 'convertToRange', 'toggleTableTotals',
+    // Data Manipulation
+    'insertRows', 'insertColumns', 'deleteRows', 'deleteColumns', 'mergeCells', 'unmergeCells', 'findReplace', 'textToColumns',
+    // PivotTable Operations
+    'createPivotTable', 'addPivotField', 'configurePivotLayout', 'refreshPivotTable', 'deletePivotTable',
+    // Slicer Operations
+    'createSlicer', 'configureSlicer', 'connectSlicerToTable', 'connectSlicerToPivot', 'deleteSlicer',
+    // Named Range Operations
+    'createNamedRange', 'deleteNamedRange', 'updateNamedRange', 'listNamedRanges',
+    // Protection Operations
+    'protectWorksheet', 'unprotectWorksheet', 'protectRange', 'unprotectRange', 'protectWorkbook', 'unprotectWorkbook',
+    // Shape Operations
+    'insertShape', 'insertImage', 'insertTextBox', 'formatShape', 'deleteShape', 'groupShapes', 'arrangeShapes', 'ungroupShapes',
+    // Comment Operations
+    'addComment', 'addNote', 'editComment', 'editNote', 'deleteComment', 'deleteNote', 'replyToComment', 'resolveComment',
+    // Sparkline Operations
+    'createSparkline', 'configureSparkline', 'deleteSparkline',
+    // Worksheet Management
+    'renameSheet', 'moveSheet', 'hideSheet', 'unhideSheet', 'freezePanes', 'unfreezePane', 'setZoom', 'splitPane', 'createView',
+    // Page Setup Operations
+    'setPageSetup', 'setPageMargins', 'setPageOrientation', 'setPrintArea', 'setHeaderFooter', 'setPageBreaks',
+    // Data Type Operations
+    'insertDataType', 'refreshDataType'
+];
+
 // Arbitrary generators
-const actionTypeArb = fc.constantFrom('formula', 'values', 'format', 'chart', 'validation', 'sort', 'autofill');
+const actionTypeArb = fc.constantFrom(...ALL_ACTION_TYPES);
 
 const cellRefArb = fc.tuple(
     fc.constantFrom('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'),
@@ -286,6 +324,121 @@ describe('History Module - Property Based Tests', () => {
         test('returns first entry for non-empty array', () => {
             const entries = [{ id: 'first' }, { id: 'second' }];
             expect(getLatestEntry(entries).id).toBe('first');
+        });
+    });
+
+    /**
+     * **Property 7: History entries render correctly for all action types**
+     * **Validates: renderHistoryEntry produces valid HTML with correct labels for all 87 types**
+     */
+    describe('Property 7: History entries render correctly for all action types', () => {
+        test('all action types render valid HTML', () => {
+            fc.assert(
+                fc.property(actionTypeArb, cellRefArb, (type, target) => {
+                    const entry = {
+                        id: 'test-id',
+                        type,
+                        target,
+                        timestamp: Date.now(),
+                        undoData: {}
+                    };
+                    const html = renderHistoryEntry(entry, () => '<svg></svg>');
+                    expect(html).toContain('history-entry');
+                    expect(html).toContain('history-icon');
+                    expect(html).toContain('history-content');
+                    expect(html).toContain(target);
+                }),
+                { numRuns: 100 }
+            );
+        });
+
+        test('all 87 action types are supported', () => {
+            expect(ALL_ACTION_TYPES.length).toBe(87);
+        });
+    });
+
+    /**
+     * **Property 8: History panel handles complex action types**
+     * **Validates: Rendering of table/pivot/slicer/shape/comment actions**
+     */
+    describe('Property 8: History panel handles complex action types', () => {
+        test('table actions render correctly', () => {
+            const tableTypes = ['createTable', 'styleTable', 'addTableRow', 'addTableColumn', 'resizeTable', 'convertToRange', 'toggleTableTotals'];
+            tableTypes.forEach(type => {
+                const entry = {
+                    id: `test-${type}`,
+                    type,
+                    target: 'SalesTable',
+                    timestamp: Date.now(),
+                    undoData: { previousState: {} }
+                };
+                const html = renderHistoryEntry(entry, () => '<svg></svg>');
+                expect(html).toContain('history-entry');
+                expect(html).toContain('SalesTable');
+            });
+        });
+
+        test('pivot actions render correctly', () => {
+            const pivotTypes = ['createPivotTable', 'addPivotField', 'configurePivotLayout', 'refreshPivotTable', 'deletePivotTable'];
+            pivotTypes.forEach(type => {
+                const entry = {
+                    id: `test-${type}`,
+                    type,
+                    target: 'PivotTable1',
+                    timestamp: Date.now(),
+                    undoData: {}
+                };
+                const html = renderHistoryEntry(entry, () => '<svg></svg>');
+                expect(html).toContain('history-entry');
+            });
+        });
+
+        test('comment actions render correctly', () => {
+            const commentTypes = ['addComment', 'addNote', 'editComment', 'editNote', 'deleteComment', 'deleteNote', 'replyToComment', 'resolveComment'];
+            commentTypes.forEach(type => {
+                const entry = {
+                    id: `test-${type}`,
+                    type,
+                    target: 'A1',
+                    timestamp: Date.now(),
+                    undoData: { previousContent: 'test' }
+                };
+                const html = renderHistoryEntry(entry, () => '<svg></svg>');
+                expect(html).toContain('history-entry');
+            });
+        });
+    });
+
+    /**
+     * **Property 9: Undo data preservation**
+     * **Validates: createHistoryEntry correctly stores undo data for all action types**
+     */
+    describe('Property 9: Undo data preservation', () => {
+        test('undo data is preserved for all action types', () => {
+            fc.assert(
+                fc.property(actionTypeArb, undoDataArb, (type, undoData) => {
+                    const action = { type, target: 'A1' };
+                    const entry = createHistoryEntry(action, undoData);
+                    
+                    expect(entry.undoData).toEqual(undoData);
+                    expect(entry.type).toBe(type);
+                }),
+                { numRuns: 100 }
+            );
+        });
+
+        test('complex undo data structures are preserved', () => {
+            const complexUndoData = {
+                values: [['a', 'b'], ['c', 'd']],
+                formulas: [['=A1', '=B1']],
+                formats: { bold: true, fill: '#FF0000' },
+                tableState: { name: 'Table1', range: 'A1:D10' }
+            };
+            const action = { type: 'createTable', target: 'A1:D10' };
+            const entry = createHistoryEntry(action, complexUndoData);
+            
+            expect(entry.undoData.values).toEqual(complexUndoData.values);
+            expect(entry.undoData.tableState).toEqual(complexUndoData.tableState);
         });
     });
 });

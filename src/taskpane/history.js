@@ -1,9 +1,176 @@
 /**
  * History Module for Undo Functionality
  * Manages action history and undo data
+ * 
+ * Supported Action Types (90 total):
+ * 
+ * BASIC OPERATIONS (6):
+ *   formula, values, format, validation, sort, autofill
+ * ADVANCED FORMATTING (2):
+ *   conditionalFormat, clearFormat
+ * CHARTS (2):
+ *   chart, pivotChart
+ * COPY/FILTER/DUPLICATES (5):
+ *   copy, copyValues, filter, clearFilter, removeDuplicates
+ * SHEET MANAGEMENT (1):
+ *   sheet
+ * TABLE OPERATIONS (7):
+ *   createTable, styleTable, addTableRow, addTableColumn,
+ *   resizeTable, convertToRange, toggleTableTotals
+ * DATA MANIPULATION (8):
+ *   insertRows, insertColumns, deleteRows, deleteColumns,
+ *   mergeCells, unmergeCells, findReplace, textToColumns
+ * PIVOTTABLE OPERATIONS (5):
+ *   createPivotTable, addPivotField, configurePivotLayout,
+ *   refreshPivotTable, deletePivotTable
+ * SLICER OPERATIONS (5):
+ *   createSlicer, configureSlicer, connectSlicerToTable,
+ *   connectSlicerToPivot, deleteSlicer
+ * NAMED RANGE OPERATIONS (4):
+ *   createNamedRange, deleteNamedRange, updateNamedRange, listNamedRanges
+ * PROTECTION OPERATIONS (6):
+ *   protectWorksheet, unprotectWorksheet, protectRange, unprotectRange,
+ *   protectWorkbook, unprotectWorkbook
+ * SHAPE OPERATIONS (9):
+ *   insertShape, insertImage, insertTextBox, formatShape, deleteShape,
+ *   groupShapes, arrangeShapes, ungroupShapes
+ * COMMENT OPERATIONS (8):
+ *   addComment, addNote, editComment, editNote, deleteComment,
+ *   deleteNote, replyToComment, resolveComment
+ * SPARKLINE OPERATIONS (3):
+ *   createSparkline, configureSparkline, deleteSparkline
+ * WORKSHEET MANAGEMENT (9):
+ *   renameSheet, moveSheet, hideSheet, unhideSheet, freezePanes,
+ *   unfreezePane, setZoom, splitPane, createView
+ * PAGE SETUP OPERATIONS (6):
+ *   setPageSetup, setPageMargins, setPageOrientation, setPrintArea,
+ *   setHeaderFooter, setPageBreaks
+ * DATA TYPE OPERATIONS (2):
+ *   insertDataType, refreshDataType
+ * HYPERLINK OPERATIONS (3):
+ *   addHyperlink, removeHyperlink, editHyperlink
+ * 
+ * Note: History functions (createHistoryEntry, addToHistory, removeFromHistory,
+ * getLatestEntry, hasHistory) are type-agnostic and work with all action types
+ * without requiring type-specific logic.
  */
 
 const MAX_ENTRIES = 20;
+
+/**
+ * Human-readable labels for all 87 action types
+ * Shared constant to avoid recreation on each renderHistoryEntry call
+ */
+const TYPE_LABELS = {
+    // Basic Operations
+    formula: "Formula",
+    values: "Values",
+    format: "Format",
+    chart: "Chart",
+    validation: "Dropdown",
+    sort: "Sort",
+    autofill: "Autofill",
+    // Advanced Formatting
+    conditionalFormat: "Conditional Format",
+    clearFormat: "Clear Format",
+    // Charts
+    pivotChart: "Pivot Chart",
+    // Copy/Filter/Duplicates
+    copy: "Copy",
+    copyValues: "Copy Values",
+    filter: "Filter",
+    clearFilter: "Clear Filter",
+    removeDuplicates: "Remove Duplicates",
+    // Sheet Management
+    sheet: "Create Sheet",
+    // Table Operations
+    createTable: "Create Table",
+    styleTable: "Style Table",
+    addTableRow: "Add Table Row",
+    addTableColumn: "Add Table Column",
+    resizeTable: "Resize Table",
+    convertToRange: "Convert to Range",
+    toggleTableTotals: "Toggle Totals",
+    // Data Manipulation
+    insertRows: "Insert Rows",
+    insertColumns: "Insert Columns",
+    deleteRows: "Delete Rows",
+    deleteColumns: "Delete Columns",
+    mergeCells: "Merge Cells",
+    unmergeCells: "Unmerge Cells",
+    findReplace: "Find & Replace",
+    textToColumns: "Text to Columns",
+    // PivotTable Operations
+    createPivotTable: "Create PivotTable",
+    addPivotField: "Add Pivot Field",
+    configurePivotLayout: "Configure Pivot",
+    refreshPivotTable: "Refresh PivotTable",
+    deletePivotTable: "Delete PivotTable",
+    // Slicer Operations
+    createSlicer: "Create Slicer",
+    configureSlicer: "Configure Slicer",
+    connectSlicerToTable: "Connect Slicer to Table",
+    connectSlicerToPivot: "Connect Slicer to Pivot",
+    deleteSlicer: "Delete Slicer",
+    // Named Range Operations
+    createNamedRange: "Create Named Range",
+    deleteNamedRange: "Delete Named Range",
+    updateNamedRange: "Update Named Range",
+    listNamedRanges: "List Named Ranges",
+    // Protection Operations
+    protectWorksheet: "Protect Sheet",
+    unprotectWorksheet: "Unprotect Sheet",
+    protectRange: "Protect Range",
+    unprotectRange: "Unprotect Range",
+    protectWorkbook: "Protect Workbook",
+    unprotectWorkbook: "Unprotect Workbook",
+    // Shape Operations
+    insertShape: "Insert Shape",
+    insertImage: "Insert Image",
+    insertTextBox: "Insert Text Box",
+    formatShape: "Format Shape",
+    deleteShape: "Delete Shape",
+    groupShapes: "Group Shapes",
+    arrangeShapes: "Arrange Shapes",
+    ungroupShapes: "Ungroup Shapes",
+    // Comment Operations
+    addComment: "Add Comment",
+    addNote: "Add Note",
+    editComment: "Edit Comment",
+    editNote: "Edit Note",
+    deleteComment: "Delete Comment",
+    deleteNote: "Delete Note",
+    replyToComment: "Reply to Comment",
+    resolveComment: "Resolve Comment",
+    // Sparkline Operations
+    createSparkline: "Create Sparkline",
+    configureSparkline: "Configure Sparkline",
+    deleteSparkline: "Delete Sparkline",
+    // Worksheet Management
+    renameSheet: "Rename Sheet",
+    moveSheet: "Move Sheet",
+    hideSheet: "Hide Sheet",
+    unhideSheet: "Unhide Sheet",
+    freezePanes: "Freeze Panes",
+    unfreezePane: "Unfreeze Panes",
+    setZoom: "Set Zoom",
+    splitPane: "Split Panes",
+    createView: "Create View",
+    // Page Setup Operations
+    setPageSetup: "Page Setup",
+    setPageMargins: "Set Margins",
+    setPageOrientation: "Set Orientation",
+    setPrintArea: "Set Print Area",
+    setHeaderFooter: "Set Header/Footer",
+    setPageBreaks: "Set Page Breaks",
+    // Data Type Operations
+    insertDataType: "Insert Entity",
+    refreshDataType: "Refresh Entity",
+    // Hyperlink Operations
+    addHyperlink: "Add Hyperlink",
+    removeHyperlink: "Remove Hyperlink",
+    editHyperlink: "Edit Hyperlink"
+};
 
 /**
  * @typedef {Object} HistoryEntry
@@ -117,17 +284,7 @@ function formatRelativeTime(timestamp) {
 function renderHistoryEntry(entry, getIcon) {
     const icon = getIcon ? getIcon(entry.type) : '';
     const timeStr = formatRelativeTime(entry.timestamp);
-    
-    const typeLabels = {
-        formula: "Formula",
-        values: "Values",
-        format: "Format",
-        chart: "Chart",
-        validation: "Dropdown",
-        sort: "Sort",
-        autofill: "Autofill"
-    };
-    const label = typeLabels[entry.type] || entry.type;
+    const label = TYPE_LABELS[entry.type] || entry.type;
     
     return `
         <div class="history-entry" data-id="${entry.id}">

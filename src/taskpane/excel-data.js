@@ -229,6 +229,187 @@ async function readExcelData(state, updateContextInfo, logDiagnostic) {
                         log(`Could not read named ranges for sheet "${sheetName}": ${namedRangeError.message}`);
                     }
                     
+                    // Detect worksheet protection status
+                    let worksheetProtection = null;
+                    try {
+                        sheet.protection.load(["protected", "options"]);
+                        await ctx.sync();
+                        
+                        if (sheet.protection.protected) {
+                            worksheetProtection = {
+                                protected: true,
+                                options: {
+                                    allowAutoFilter: sheet.protection.options.allowAutoFilter,
+                                    allowDeleteColumns: sheet.protection.options.allowDeleteColumns,
+                                    allowDeleteRows: sheet.protection.options.allowDeleteRows,
+                                    allowFormatCells: sheet.protection.options.allowFormatCells,
+                                    allowFormatColumns: sheet.protection.options.allowFormatColumns,
+                                    allowFormatRows: sheet.protection.options.allowFormatRows,
+                                    allowInsertColumns: sheet.protection.options.allowInsertColumns,
+                                    allowInsertRows: sheet.protection.options.allowInsertRows,
+                                    allowInsertHyperlinks: sheet.protection.options.allowInsertHyperlinks,
+                                    allowPivotTables: sheet.protection.options.allowPivotTables,
+                                    allowSort: sheet.protection.options.allowSort,
+                                    selectionMode: sheet.protection.options.selectionMode
+                                }
+                            };
+                            log(`Sheet "${sheetName}" is protected`);
+                        } else {
+                            worksheetProtection = { protected: false };
+                        }
+                    } catch (protectionError) {
+                        log(`Could not read worksheet protection status for "${sheetName}": ${protectionError.message}`);
+                        worksheetProtection = { protected: false, error: protectionError.message };
+                    }
+                    
+                    // Detect comments and notes on this sheet
+                    const commentsAndNotes = { comments: [], notes: [] };
+                    try {
+                        // Load threaded comments
+                        sheet.comments.load("items");
+                        await ctx.sync();
+                        
+                        if (sheet.comments.items.length > 0) {
+                            // Batch load comment properties
+                            for (const comment of sheet.comments.items) {
+                                comment.load(["id", "authorName", "content", "creationDate", "resolved"]);
+                                comment.replies.load("items");
+                            }
+                            await ctx.sync();
+                            
+                            // Batch load reply properties
+                            for (const comment of sheet.comments.items) {
+                                for (const reply of comment.replies.items) {
+                                    reply.load(["id", "authorName", "content", "creationDate"]);
+                                }
+                            }
+                            await ctx.sync();
+                            
+                            // Extract comment data
+                            for (const comment of sheet.comments.items) {
+                                try {
+                                    // Get the cell location of the comment
+                                    const location = comment.getLocation();
+                                    location.load("address");
+                                    await ctx.sync();
+                                    
+                                    commentsAndNotes.comments.push({
+                                        cell: location.address,
+                                        author: comment.authorName,
+                                        content: comment.content,
+                                        resolved: comment.resolved,
+                                        createdDate: comment.creationDate,
+                                        replyCount: comment.replies.items.length,
+                                        replies: comment.replies.items.map(r => ({
+                                            author: r.authorName,
+                                            content: r.content,
+                                            createdDate: r.creationDate
+                                        }))
+                                    });
+                                } catch (locError) {
+                                    log(`Could not get location for comment: ${locError.message}`);
+                                }
+                            }
+                            log(`Found ${commentsAndNotes.comments.length} comments on "${sheetName}"`);
+                        }
+                        
+                        // Note: Legacy notes detection is limited in Office.js
+                        // Notes are accessed via range.note property, but there's no efficient way
+                        // to enumerate all notes without checking each cell individually
+                        // For performance, we skip note enumeration and rely on comments API
+                        
+                    } catch (commentError) {
+                        log(`Could not read comments for sheet "${sheetName}": ${commentError.message}`);
+                    }
+                    
+                    // Detect sparkline groups on this sheet
+                    const sparklineGroups = [];
+                    try {
+                        // Check if sparklineGroups API is available
+                        if (sheet.sparklineGroups) {
+                            sheet.sparklineGroups.load("items");
+                            await ctx.sync();
+                            
+                            if (sheet.sparklineGroups.items.length > 0) {
+                                // Batch load sparkline group properties
+                                for (const group of sheet.sparklineGroups.items) {
+                                    group.load(["type"]);
+                                    group.load("sparklines/items/location");
+                                }
+                                await ctx.sync();
+                                
+                                // Batch load location addresses
+                                for (const group of sheet.sparklineGroups.items) {
+                                    for (const sparkline of group.sparklines.items) {
+                                        sparkline.location.load("address");
+                                    }
+                                }
+                                await ctx.sync();
+                                
+                                // Helper to convert sparkline type enum to string
+                                const getSparklineTypeName = (type) => {
+                                    if (type === Excel.SparklineType.line) return "Line";
+                                    if (type === Excel.SparklineType.column) return "Column";
+                                    if (type === Excel.SparklineType.winLoss) return "WinLoss";
+                                    return "Unknown";
+                                };
+                                
+                                // Extract sparkline group data
+                                for (const group of sheet.sparklineGroups.items) {
+                                    try {
+                                        const locations = group.sparklines.items.map(s => s.location.address);
+                                        sparklineGroups.push({
+                                            type: getSparklineTypeName(group.type),
+                                            locations: locations,
+                                            count: locations.length
+                                        });
+                                    } catch (groupError) {
+                                        log(`Error reading sparkline group details: ${groupError.message}`);
+                                    }
+                                }
+                                log(`Found ${sparklineGroups.length} sparkline group(s) on "${sheetName}"`);
+                            }
+                        }
+                    } catch (sparklineError) {
+                        log(`Could not read sparklines for sheet "${sheetName}": ${sparklineError.message}`);
+                    }
+                    
+                    // Detect data type cells (EntityCellValue, LinkedEntityCellValue)
+                    const dataTypeCells = [];
+                    try {
+                        // Sample first 50x10 cells for performance (full scan expensive)
+                        const sampleRows = Math.min(49, rowCount - 1);
+                        const sampleCols = Math.min(9, colCount - 1);
+                        if (sampleRows >= 0 && sampleCols >= 0) {
+                            const sampleRange = usedRange.getCell(0, 0).getResizedRange(sampleRows, sampleCols);
+                            sampleRange.load(["address", "valueTypes", "valuesAsJson"]);
+                            await ctx.sync();
+                            
+                            for (let r = 0; r < sampleRange.valueTypes.length; r++) {
+                                for (let c = 0; c < sampleRange.valueTypes[r].length; c++) {
+                                    const cellType = sampleRange.valueTypes[r][c];
+                                    if (cellType === "Entity" || cellType === "LinkedEntity") {
+                                        const cellValue = sampleRange.valuesAsJson[r][c];
+                                        const cellAddress = `${colIndexToLetter(startCol + c)}${startRow + r + 1}`;
+                                        dataTypeCells.push({
+                                            address: cellAddress,
+                                            type: cellType,
+                                            text: cellValue.text || "",
+                                            basicValue: cellValue.basicValue || "",
+                                            properties: Object.keys(cellValue.properties || {}).slice(0, 5),
+                                            serviceId: cellType === "LinkedEntity" ? (cellValue.serviceId || "Unknown") : null
+                                        });
+                                    }
+                                }
+                            }
+                            if (dataTypeCells.length > 0) {
+                                log(`Found ${dataTypeCells.length} data type cells on "${sheetName}" (sampled first ${sampleRows + 1}x${sampleCols + 1} cells)`);
+                            }
+                        }
+                    } catch (dataTypeError) {
+                        log(`Could not read data types for sheet "${sheetName}": ${dataTypeError.message}`);
+                    }
+                    
                     allSheetsData.push({
                         sheetName,
                         address: usedRange.address,
@@ -242,10 +423,14 @@ async function readExcelData(state, updateContextInfo, logDiagnostic) {
                         dataStartRow: startRow + 2,
                         headerValidation,
                         pivotTables,
-                        namedRanges: worksheetNamedRanges
+                        namedRanges: worksheetNamedRanges,
+                        protection: worksheetProtection,
+                        commentsAndNotes,
+                        sparklineGroups,
+                        dataTypeCells
                     });
                     
-                    log(`Read sheet "${sheetName}": ${rowCount} rows × ${colCount} cols, ${pivotTables.length} PivotTables, ${worksheetNamedRanges.length} named ranges`);
+                    log(`Read sheet "${sheetName}": ${rowCount} rows × ${colCount} cols, ${pivotTables.length} PivotTables, ${worksheetNamedRanges.length} named ranges, ${commentsAndNotes.comments.length} comments`);
                 } catch (e) {
                     // Sheet might be empty, log and skip it
                     const sheetName = sheet.name || "Unknown";
@@ -281,11 +466,28 @@ async function readExcelData(state, updateContextInfo, logDiagnostic) {
                 log(`Could not read workbook named ranges: ${namedRangeError.message}`);
             }
             
+            // Detect workbook protection status
+            let workbookProtection = null;
+            try {
+                ctx.workbook.protection.load("protected");
+                await ctx.sync();
+                workbookProtection = {
+                    protected: ctx.workbook.protection.protected
+                };
+                if (workbookProtection.protected) {
+                    log("Workbook structure is protected");
+                }
+            } catch (protectionError) {
+                log(`Could not read workbook protection status: ${protectionError.message}`);
+                workbookProtection = { protected: false, error: protectionError.message };
+            }
+            
             // Handle case where no sheets have usable data
             if (allSheetsData.length === 0) {
                 state.currentData = null;
                 state.allSheetsData = [];
                 state.workbookNamedRanges = workbookNamedRanges;
+                state.workbookProtection = workbookProtection;
                 updateContextInfo("No usable data found in any sheet");
                 log("No usable data found in any sheet");
                 return;
@@ -296,6 +498,7 @@ async function readExcelData(state, updateContextInfo, logDiagnostic) {
             state.currentData = activeSheetData || allSheetsData[0] || null;
             state.allSheetsData = shouldReadAllSheets ? allSheetsData : [];
             state.workbookNamedRanges = workbookNamedRanges;
+            state.workbookProtection = workbookProtection;
             
             if (state.currentData) {
                 const scopeText = shouldReadAllSheets ? ` (${allSheetsData.length} sheets)` : "";
@@ -577,6 +780,230 @@ function buildDataContext(state) {
         
         context += `**Usage in formulas:** Reference by name (e.g., =SUM(SalesData) or =TotalRevenue*0.1)\n`;
         context += `**Note:** You can create new named ranges with createNamedRange action for frequently used ranges.\n`;
+    }
+    
+    // Add protection status information
+    if (state.currentData && state.currentData.protection) {
+        const prot = state.currentData.protection;
+        context += `\n## WORKSHEET PROTECTION STATUS\n`;
+        if (prot.protected) {
+            context += `**Status:** Protected\n`;
+            context += `**Allowed Actions:**\n`;
+            if (prot.options) {
+                const allowed = [];
+                if (prot.options.allowFormatCells) allowed.push("Format cells");
+                if (prot.options.allowSort) allowed.push("Sort");
+                if (prot.options.allowAutoFilter) allowed.push("Filter");
+                if (prot.options.allowInsertRows) allowed.push("Insert rows");
+                if (prot.options.allowInsertColumns) allowed.push("Insert columns");
+                if (prot.options.allowDeleteRows) allowed.push("Delete rows");
+                if (prot.options.allowDeleteColumns) allowed.push("Delete columns");
+                if (prot.options.allowPivotTables) allowed.push("PivotTables");
+                if (allowed.length > 0) {
+                    context += `- ${allowed.join(", ")}\n`;
+                } else {
+                    context += `- None (fully locked)\n`;
+                }
+                context += `**Selection Mode:** ${prot.options.selectionMode}\n`;
+            }
+            context += `\n**Note:** To modify protection, use unprotectWorksheet action (password may be required).\n`;
+        } else {
+            context += `**Status:** Not protected\n`;
+            context += `**Note:** You can protect this worksheet with protectWorksheet action to prevent unauthorized changes.\n`;
+        }
+    }
+    
+    if (state.workbookProtection) {
+        context += `\n## WORKBOOK PROTECTION STATUS\n`;
+        if (state.workbookProtection.protected) {
+            context += `**Status:** Protected (structure locked)\n`;
+            context += `**Effect:** Cannot add, delete, rename, or move sheets\n`;
+            context += `**Note:** To modify structure, use unprotectWorkbook action (password may be required).\n`;
+        } else {
+            context += `**Status:** Not protected\n`;
+            context += `**Note:** You can protect workbook structure with protectWorkbook action.\n`;
+        }
+    }
+    
+    // Add comments and notes information (aggregate from all sheets when in multi-sheet mode)
+    const allComments = [];
+    const allNotes = [];
+    
+    // Collect comments/notes from current sheet
+    if (state.currentData && state.currentData.commentsAndNotes) {
+        const { comments, notes } = state.currentData.commentsAndNotes;
+        for (const comment of comments) {
+            allComments.push({ ...comment, sheetName: state.currentData.sheetName });
+        }
+        for (const note of notes) {
+            allNotes.push({ ...note, sheetName: state.currentData.sheetName });
+        }
+    }
+    
+    // Collect comments/notes from other sheets when in multi-sheet mode
+    if (state.allSheetsData && state.allSheetsData.length > 0) {
+        for (const sheet of state.allSheetsData) {
+            if (sheet.sheetName === sheetName) continue; // Already added from currentData
+            if (sheet.commentsAndNotes) {
+                const { comments, notes } = sheet.commentsAndNotes;
+                for (const comment of comments) {
+                    allComments.push({ ...comment, sheetName: sheet.sheetName });
+                }
+                for (const note of notes) {
+                    allNotes.push({ ...note, sheetName: sheet.sheetName });
+                }
+            }
+        }
+    }
+    
+    if (allComments.length > 0 || allNotes.length > 0) {
+        context += `\n## EXISTING COMMENTS AND NOTES\n`;
+        
+        if (allComments.length > 0) {
+            context += `\n### Threaded Comments (${allComments.length} total)\n`;
+            context += `Modern collaboration comments with replies and resolution tracking.\n\n`;
+            
+            // Limit to first 15 comments across all sheets
+            for (const comment of allComments.slice(0, 15)) {
+                const cellRef = comment.sheetName !== sheetName 
+                    ? `${comment.sheetName}!${comment.cell}` 
+                    : comment.cell;
+                context += `**${cellRef}** by ${comment.author}:\n`;
+                context += `- Content: "${comment.content.substring(0, 100)}${comment.content.length > 100 ? '...' : ''}"\n`;
+                context += `- Status: ${comment.resolved ? 'Resolved' : 'Open'}\n`;
+                if (comment.replyCount > 0) {
+                    context += `- Replies: ${comment.replyCount}\n`;
+                }
+                context += `\n`;
+            }
+            
+            if (allComments.length > 15) {
+                context += `... and ${allComments.length - 15} more comments across sheets\n\n`;
+            }
+        }
+        
+        if (allNotes.length > 0) {
+            context += `\n### Notes (${allNotes.length} total)\n`;
+            context += `Legacy annotations for reminders and documentation.\n\n`;
+            
+            // Limit to first 15 notes across all sheets
+            for (const note of allNotes.slice(0, 15)) {
+                const cellRef = note.sheetName !== sheetName 
+                    ? `${note.sheetName}!${note.cell}` 
+                    : note.cell;
+                context += `**${cellRef}**: "${note.text.substring(0, 80)}${note.text.length > 80 ? '...' : ''}"\n`;
+            }
+            
+            if (allNotes.length > 15) {
+                context += `... and ${allNotes.length - 15} more notes across sheets\n\n`;
+            }
+        }
+        
+        context += `\n**Actions Available:**\n`;
+        context += `- Add comments for collaboration: addComment action\n`;
+        context += `- Add notes for documentation: addNote action\n`;
+        context += `- Reply to comments: replyToComment action\n`;
+        context += `- Resolve discussions: resolveComment action\n`;
+        context += `- Edit or delete: editComment, deleteComment, editNote, deleteNote actions\n`;
+    }
+    
+    // Add sparkline information (aggregate from all sheets when in multi-sheet mode)
+    const allSparklineGroups = [];
+    
+    // Collect sparklines from current sheet
+    if (state.currentData && state.currentData.sparklineGroups && state.currentData.sparklineGroups.length > 0) {
+        for (const group of state.currentData.sparklineGroups) {
+            allSparklineGroups.push({ ...group, sheetName: state.currentData.sheetName });
+        }
+    }
+    
+    // Collect sparklines from other sheets when in multi-sheet mode
+    if (state.allSheetsData && state.allSheetsData.length > 0) {
+        for (const sheet of state.allSheetsData) {
+            if (sheet.sheetName === sheetName) continue; // Already added from currentData
+            if (sheet.sparklineGroups && sheet.sparklineGroups.length > 0) {
+                for (const group of sheet.sparklineGroups) {
+                    allSparklineGroups.push({ ...group, sheetName: sheet.sheetName });
+                }
+            }
+        }
+    }
+    
+    if (allSparklineGroups.length > 0) {
+        context += `\n## EXISTING SPARKLINES IN WORKBOOK\n`;
+        context += `Compact inline visualizations for trend analysis.\n\n`;
+        
+        // Group by sheet
+        const sparklinesBySheet = {};
+        for (const group of allSparklineGroups) {
+            if (!sparklinesBySheet[group.sheetName]) {
+                sparklinesBySheet[group.sheetName] = [];
+            }
+            sparklinesBySheet[group.sheetName].push(group);
+        }
+        
+        for (const [sheet, groups] of Object.entries(sparklinesBySheet)) {
+            const sheetLabel = sheet === sheetName ? `${sheet} (current)` : sheet;
+            context += `### ${sheetLabel}\n`;
+            for (const group of groups) {
+                const locationSummary = group.locations.length <= 3 
+                    ? group.locations.join(", ")
+                    : `${group.locations.slice(0, 3).join(", ")} ... (${group.count} total)`;
+                context += `- **${group.type}** sparkline(s) at: ${locationSummary}\n`;
+            }
+            context += `\n`;
+        }
+        
+        context += `**Actions Available:**\n`;
+        context += `- Create new sparklines: createSparkline action\n`;
+        context += `- Configure existing: configureSparkline action (colors, markers, axes)\n`;
+        context += `- Delete sparklines: deleteSparkline action\n`;
+        context += `\n**Note:** Sparklines require ExcelApi 1.10+ (Excel 365, Excel 2019+, or Excel Online).\n`;
+    }
+    
+    // Add data type cells information (aggregate from all sheets)
+    const allDataTypeCells = [];
+    
+    // Current sheet
+    if (state.currentData?.dataTypeCells) {
+        allDataTypeCells.push(...state.currentData.dataTypeCells.map(c => ({...c, sheetName: state.currentData.sheetName})));
+    }
+    
+    // All sheets
+    state.allSheetsData?.forEach(sheet => {
+        if (sheet.sheetName === sheetName) return; // Already added from currentData
+        if (sheet.dataTypeCells) {
+            allDataTypeCells.push(...sheet.dataTypeCells.map(c => ({...c, sheetName: sheet.sheetName})));
+        }
+    });
+    
+    // Limit to top 20 total for performance/token limit
+    const topDataTypes = allDataTypeCells.slice(0, 20);
+    
+    if (topDataTypes.length > 0) {
+        context += `\n## EXISTING DATA TYPE CELLS (${topDataTypes.length} sampled)\n`;
+        context += `Entity cards with hover properties. Built-in Stocks/Geography shown as LinkedEntity.\n\n`;
+        
+        // Group by sheet
+        const bySheet = {};
+        topDataTypes.forEach(cell => {
+            if (!bySheet[cell.sheetName]) bySheet[cell.sheetName] = [];
+            bySheet[cell.sheetName].push(cell);
+        });
+        
+        Object.entries(bySheet).forEach(([sheet, cells]) => {
+            const label = sheet === sheetName ? `${sheet} (current)` : sheet;
+            context += `### ${label} (${cells.length})\n`;
+            cells.slice(0, 10).forEach(cell => {
+                const props = cell.properties.length > 0 ? ` (${cell.properties.join(', ')})` : '';
+                const service = cell.serviceId ? ` [${cell.serviceId}]` : '';
+                context += `- **${cell.address}**: ${cell.type} - "${cell.text}"${props}${service}\n`;
+            });
+            if (cells.length > 10) context += `... ${cells.length - 10} more\n`;
+            context += `\n`;
+        });
+        
+        context += `**Note**: Custom entities fully supported. LinkedEntity (Stocks/Geography) require manual UI conversion. Use \`insertDataType\`/\`refreshDataType\` for custom entities, reference properties in formulas (e.g., \`=A2.Price\`).\n`;
     }
     
     return context;
