@@ -631,6 +631,22 @@ body {
     border-color: var(--primary);
 }
 
+.model-select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.model-select:focus {
+    border-color: var(--primary);
+}
+
 .hint {
     font-size: 11px;
     color: var(--text-3);

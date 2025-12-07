@@ -6,7 +6,7 @@
 /* global document, Excel, Office, fetch, localStorage */
 
 // Version number - increment with each update
-const VERSION = "3.6.1";
+const VERSION = "3.6.2";
 
 import {
     detectTaskType,
@@ -50,10 +50,16 @@ import {
 } from "./diagnostics.js";
 
 const CONFIG = {
-    GEMINI_MODEL: "gemini-2.0-flash",
+    GEMINI_MODEL: "gemini-2.0-flash-exp", // Default model
+    GEMINI_MODELS: {
+        FLASH_2_5: "gemini-2.5-flash",
+        FLASH_2_0: "gemini-2.0-flash-exp",
+        PRO_2_0: "gemini-2.0-pro-exp"
+    },
     API_ENDPOINT: "https://generativelanguage.googleapis.com/v1beta/models/",
     STORAGE_KEY: "excel_copilot_api_key",
     THEME_KEY: "excel_copilot_theme",
+    MODEL_KEY: "excel_copilot_model",
     MAX_HISTORY: 10,
     MAX_RETRIES: 3,
     RETRY_DELAY: 1000,
@@ -62,6 +68,7 @@ const CONFIG = {
 
 const state = {
     apiKey: "",
+    selectedModel: CONFIG.GEMINI_MODELS.FLASH_2_5, // Default to Gemini 2.5 Flash
     pendingActions: [],
     currentData: null,
     allSheetsData: [],       // Data from all sheets in workbook
@@ -129,6 +136,15 @@ function initApp() {
         logWarn("Could not load API key");
     }
     
+    // Load saved model selection
+    const savedModel = localStorage.getItem(CONFIG.MODEL_KEY);
+    if (savedModel && Object.values(CONFIG.GEMINI_MODELS).includes(savedModel)) {
+        state.selectedModel = savedModel;
+    } else {
+        // Default to Gemini 2.5 Flash
+        state.selectedModel = CONFIG.GEMINI_MODELS.FLASH_2_5;
+    }
+    
     // Update version badge and add click handler
     const versionBadge = document.getElementById("versionBadge");
     if (versionBadge) {
@@ -184,6 +200,8 @@ function bindEvents() {
     
     document.getElementById("settingsBtn")?.addEventListener("click", () => {
         document.getElementById("apiKeyInput").value = state.apiKey;
+        // Set model selection
+        document.getElementById("modelSelect").value = state.selectedModel;
         // Set worksheet scope radio button
         document.getElementById(state.worksheetScope === "all" ? "scopeAll" : "scopeSingle").checked = true;
         document.getElementById("modal").classList.add("open");
@@ -204,6 +222,10 @@ function bindEvents() {
             localStorage.removeItem(CONFIG.STORAGE_KEY);
         }
         
+        // Save model selection
+        state.selectedModel = document.getElementById("modelSelect").value;
+        localStorage.setItem(CONFIG.MODEL_KEY, state.selectedModel);
+        
         // Save worksheet scope preference
         const selectedScope = document.querySelector('input[name="worksheetScope"]:checked')?.value || "single";
         const scopeChanged = state.worksheetScope !== selectedScope;
@@ -220,7 +242,7 @@ function bindEvents() {
         
         closeModal();
         toast("Saved");
-        logInfo("Settings saved", { scope: selectedScope });
+        logInfo("Settings saved", { scope: selectedScope, model: state.selectedModel });
     });
     
     // Comment 8: Add "Remove API key" functionality
@@ -1042,7 +1064,7 @@ async function callAI(userPrompt) {
     
     // Make API call without retry logic - let errors through
     const res = await fetch(
-        `${CONFIG.API_ENDPOINT}${CONFIG.GEMINI_MODEL}:generateContent?key=${state.apiKey}`,
+        `${CONFIG.API_ENDPOINT}${state.selectedModel}:generateContent?key=${state.apiKey}`,
         {
             method: "POST",
             headers: { "Content-Type": "application/json" },
